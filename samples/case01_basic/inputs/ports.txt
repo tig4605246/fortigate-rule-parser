@@ -1,0 +1,4 @@
+ssh,22/tcp
+http,80/tcp
+custom8002,8002/tcp
+dns,53/udp

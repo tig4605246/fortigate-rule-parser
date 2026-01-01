@@ -1,0 +1,2 @@
+src_network_segment,dst_network_segment,dst_gn,dst_site,dst_location,service_label,protocol,port,decision,matched_policy_id,matched_policy_name,matched_policy_action,reason
+192.168.10.0/24,93.184.216.34/32,GN99,INTERNET,example.com,http,tcp,80,UNKNOWN,1,allow-http-to-fqdn,accept,FQDN_NOT_RESOLVED
