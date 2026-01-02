@@ -71,8 +71,10 @@ def _evaluate_address_group(
     """Evaluate address group references against a target network."""
     aggregated_objects: list[AddressObject] = []
     has_unknown = False
+    print("_evaluate_address_group")
     for name in names:
         objects = list(address_book.resolve_group_members(name))
+        print(objects)
         if not objects:
             has_unknown = True
         aggregated_objects.extend(objects)
@@ -144,18 +146,25 @@ def evaluate_policy(
     ignore_schedule: bool,
 ) -> MatchDetail:
     """Evaluate policies and return the first definitive decision."""
+    print(service_book)
     for policy in policies:
+        print(policy.name, policy.schedule, policy.enabled, src_network,policy.source, dst_network,policy.destination)
         if not policy.enabled:
+            print("policy continue")
             continue
-        if not ignore_schedule and not _schedule_active(policy.schedule):
+        if not _schedule_active(policy.schedule):
+            print("schedule continue")
             continue
         src_result = _evaluate_address_group(address_book, policy.source, src_network, match_mode)
+        print(src_result)
         if src_result == MatchOutcome.NO_MATCH:
             continue
         dst_result = _evaluate_address_group(address_book, policy.destination, dst_network, match_mode)
+        print(dst_result)
         if dst_result == MatchOutcome.NO_MATCH:
             continue
         service_result = _evaluate_service_group(service_book, policy.services, protocol, port)
+        print(service_result)
         if service_result == MatchOutcome.NO_MATCH:
             continue
 

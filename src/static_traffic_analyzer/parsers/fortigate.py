@@ -128,6 +128,7 @@ def parse_fortigate_config(lines: Iterable[str]) -> FortiGateData:
         if not current_name:
             return
         policy_id = current_name
+        name = str(current_fields.get("name", "no-name"))
         srcaddr = current_fields.get("srcaddr", [])
         dstaddr = current_fields.get("dstaddr", [])
         service = current_fields.get("service", [])
@@ -143,14 +144,14 @@ def parse_fortigate_config(lines: Iterable[str]) -> FortiGateData:
         policies.append(
             PolicyRule(
                 policy_id=policy_id,
-                name=policy_id,
+                name=name.strip('"'),
                 priority=int(policy_id) if policy_id.isdigit() else len(policies) + 1,
                 source=tuple(item.strip('"') for item in srcaddr if item),
                 destination=tuple(item.strip('"') for item in dstaddr if item),
                 services=tuple(item.strip('"') for item in service if item),
                 action=action,
                 enabled=status.lower() == "enable",
-                schedule=schedule if isinstance(schedule, str) else None,
+                schedule=schedule.strip('"') if isinstance(schedule, str) else None,
             )
         )
         current_name = None
