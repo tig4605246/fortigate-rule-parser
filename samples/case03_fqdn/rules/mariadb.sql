@@ -1,4 +1,4 @@
--- case03_fqdn: minimal schema + inserts for firewall_mgmt
+-- case03_fqdn_no_addrgrp: minimal schema + inserts
 CREATE DATABASE IF NOT EXISTS firewall_mgmt;
 USE firewall_mgmt;
 
