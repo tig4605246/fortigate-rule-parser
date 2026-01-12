@@ -1,3 +1,3 @@
 src_network_segment,dst_network_segment,dst_gn,dst_site,dst_location,service_label,protocol,port,decision,matched_policy_id,matched_policy_action,reason
 192.168.20.10/32,10.0.1.5/32,GN01,HSINCHU,DB,custom8002,tcp,8002,ALLOW,40,accept,MATCH_POLICY_ACCEPT
-192.168.20.10/32,10.0.1.5/32,GN01,HSINCHU,DB,ssh,tcp,22,DENY,,,,IMPLICIT_DENY
+192.168.20.10/32,10.0.1.5/32,GN01,HSINCHU,DB,ssh,tcp,22,DENY,,,IMPLICIT_DENY

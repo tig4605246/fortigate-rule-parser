@@ -57,8 +57,8 @@ CREATE TABLE cfg_policy (
   updated_at TIMESTAMP NULL
 );
 INSERT INTO cfg_address (fab_name, firewall_id, object_name, address_type, subnet) VALUES
-  ('FAB', 'FW1', 'SRC_NET_10', 'subnet', '192.168.10.0/24'),
-  ('FAB', 'FW1', 'DST_WEB_NET', 'subnet', '10.0.0.0/24');
+  ('FAB', 'FW1', 'SRC_NET_10', 'ipmask', '192.168.10.0/24'),
+  ('FAB', 'FW1', 'DST_WEB_NET', 'ipmask', '10.0.0.0/24');
 
 INSERT INTO cfg_policy (fab_name, firewall_id, priority, policy_id, src_objects, dst_objects, service_object, action, is_enabled, log_traffic, comments)
 VALUES
