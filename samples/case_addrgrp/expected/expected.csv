@@ -1,0 +1,7 @@
+src_network_segment,dst_network_segment,dst_gn,dst_site,dst_location,service_label,protocol,port,decision,matched_policy_id,matched_policy_name,matched_policy_action,reason
+10.20.0.0/24,172.20.0.0/24,,,,WEB_HTTP,tcp,80,ALLOW,1,1,accept,MATCHED_POLICY
+10.20.0.0/24,172.21.0.0/24,,,,WEB_HTTP,tcp,80,DENY,2,2,deny,MATCHED_POLICY
+10.21.0.0/24,172.20.0.0/24,,,,WEB_HTTP,tcp,80,DENY,3,3,deny,MATCHED_POLICY
+10.21.0.0/24,172.21.0.0/24,,,,WEB_HTTP,tcp,80,DENY,,,,IMPLICIT_DENY
+10.22.0.10/32,172.20.0.0/24,,,,WEB_HTTP,tcp,80,ALLOW,1,1,accept,MATCHED_POLICY
+10.22.0.10/32,172.21.0.0/24,,,,WEB_HTTP,tcp,80,DENY,2,2,deny,MATCHED_POLICY

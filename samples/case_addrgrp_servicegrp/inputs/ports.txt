@@ -1,0 +1,2 @@
+DNS_UDP,53/udp
+APP_TCP,8080/tcp

@@ -1,0 +1,4 @@
+DNS_UDP,53/udp
+APP_TCP,8080/tcp
+SMTP_TCP,25/tcp
+OTHER_TCP,9090/tcp

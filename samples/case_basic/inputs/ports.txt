@@ -1,0 +1,2 @@
+WEB_HTTP,80/tcp
+ADMIN_SSH,22/tcp

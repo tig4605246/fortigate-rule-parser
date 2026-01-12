@@ -27,11 +27,11 @@ def _load_csv_networks(path: Path, header_name: str) -> list[dict[str, str]]:
     return records
 
 
-def _select_rule_source(config: str | None, excel: str | None, db_conn: str | None):
+def _select_rule_source(config: str | None, excel: str | None, db_selected: bool):
     """Ensure exactly one rules source is selected."""
-    provided = [value for value in (config, excel, db_conn) if value]
+    provided = [value for value in (config, excel, "db" if db_selected else None) if value]
     if len(provided) != 1:
-        raise ParseError("Specify exactly one of --config, --excel, or --db-conn")
+        raise ParseError("Specify exactly one of --config, --excel, or MariaDB args")
 
 
 def _iter_ports(ports_path: Path):
@@ -73,7 +73,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Static Traffic Analyzer")
     parser.add_argument("--config", help="FortiGate CLI config file")
     parser.add_argument("--excel", help="Excel rules workbook")
-    parser.add_argument("--db-conn", help="MariaDB DSN")
+    parser.add_argument("--db-user", help="MariaDB user")
+    parser.add_argument("--db-password", help="MariaDB password")
+    parser.add_argument("--db-host", help="MariaDB host")
+    parser.add_argument("--db-name", help="MariaDB database")
     parser.add_argument("--src-csv", required=True, help="Source CIDR list CSV")
     parser.add_argument("--dst-csv", required=True, help="Destination CIDR list CSV")
     parser.add_argument("--ports", required=True, help="Ports list file")
@@ -90,7 +93,8 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        _select_rule_source(args.config, args.excel, args.db_conn)
+        db_selected = any((args.db_user, args.db_password, args.db_host, args.db_name))
+        _select_rule_source(args.config, args.excel, db_selected)
 
         if args.config:
             with Path(args.config).open(encoding="utf-8") as handle:
@@ -98,7 +102,24 @@ def main() -> None:
         elif args.excel:
             data = parse_excel(args.excel)
         else:
-            data = parse_database(args.db_conn)
+            missing = [
+                name
+                for name, value in (
+                    ("--db-user", args.db_user),
+                    ("--db-password", args.db_password),
+                    ("--db-host", args.db_host),
+                    ("--db-name", args.db_name),
+                )
+                if not value
+            ]
+            if missing:
+                raise ParseError(f"Missing required MariaDB args: {', '.join(missing)}")
+            data = parse_database(
+                user=args.db_user,
+                password=args.db_password,
+                host=args.db_host,
+                database=args.db_name,
+            )
 
         src_records = _load_csv_networks(Path(args.src_csv), "Network Segment")
         dst_records = _load_csv_networks(Path(args.dst_csv), "Network Segment")

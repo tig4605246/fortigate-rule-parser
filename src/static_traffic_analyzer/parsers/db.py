@@ -30,10 +30,15 @@ def _require_connector() -> Any:
     return mysql.connector
 
 
-def parse_database(dsn: str) -> DatabaseData:
+def parse_database(user: str, password: str, host: str, database: str) -> DatabaseData:
     """Load MariaDB firewall tables into internal models."""
     connector = _require_connector()
-    connection = connector.connect(dsn=dsn)
+    connection = connector.connect(
+        user=user,
+        password=password,
+        host=host,
+        database=database,
+    )
     cursor = connection.cursor(dictionary=True)
 
     address_book = AddressBook()

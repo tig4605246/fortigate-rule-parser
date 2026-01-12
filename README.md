@@ -15,3 +15,25 @@ The implementation of the tool can be divided into 3 parts
 ## Overview
 
 A FrotiGate configuration written in Golang
+
+## CLI usage
+
+Parse rules from MariaDB using explicit connection args:
+
+```sh
+PYTHONPATH=src python3 -m static_traffic_analyzer.cli \
+  --db-user root \
+  --db-password static \
+  --db-host 127.0.0.1 \
+  --db-name firewall_mgmt \
+  --src-csv samples/case_basic/inputs/src.csv \
+  --dst-csv samples/case_basic/inputs/dst.csv \
+  --ports samples/case_basic/inputs/ports.txt \
+  --out out.csv
+```
+
+If you want a local MariaDB with sample rules, use `docker-compose.yaml` and start it with:
+
+```sh
+docker compose up -d
+```

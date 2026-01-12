@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: static-traffic-analyzer-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: "static"
+      MARIADB_DATABASE: "firewall_mgmt"
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./samples/case_basic/rules/mariadb.sql:/docker-entrypoint-initdb.d/01-mariadb.sql:ro
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-pstatic"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  mariadb_data:
