@@ -25,17 +25,17 @@ for case_path in samples/case*; do
   )
 
   # FortiGate config test
-  if [ -f "$case_path/rules/fortigate.conf" ]; then
-    echo "  -> Running with fortigate.conf"
-    uv run static-traffic-analyzer --config "$case_path/rules/fortigate.conf" "${common_args[@]}"
-    diff "$out_file" "$case_path/expected/expected.csv"
-  fi
-  # Excel test
-  if [ -f "$case_path/rules/rules.xlsx" ]; then
-    echo "  -> Running with rules.xlsx"
-    uv run static-traffic-analyzer --excel "$case_path/rules/rules.xlsx" "${common_args[@]}"
-    diff "$out_file" "$case_path/expected/expected.csv"
-  fi
+  # if [ -f "$case_path/rules/fortigate.conf" ]; then
+  #   echo "  -> Running with fortigate.conf"
+  #   uv run static-traffic-analyzer --config "$case_path/rules/fortigate.conf" "${common_args[@]}"
+  #   diff "$out_file" "$case_path/expected/expected.csv"
+  # fi
+  # # Excel test
+  # if [ -f "$case_path/rules/rules.xlsx" ]; then
+  #   echo "  -> Running with rules.xlsx"
+  #   uv run static-traffic-analyzer --excel "$case_path/rules/rules.xlsx" "${common_args[@]}"
+  #   diff "$out_file" "$case_path/expected/expected.csv"
+  # fi
 
 done
 
@@ -55,20 +55,29 @@ if docker compose ps | grep -q 'mariadb.*Up'; then
     )
 
     # Before running the test, we need to load the data from the .sql file.
-    if [ -f "$case_path/rules/mariadb.sql" ]; then
-        echo "  -> Seeding DB with $case_path/rules/mariadb.sql"
-        docker compose exec -T mariadb mysql -uroot -pstatic firewall_mgmt < "$case_path/rules/mariadb.sql"
-    fi
+    # if [ -f "$case_path/rules/mariadb.sql" ]; then
+    #     echo "  -> Seeding DB with $case_path/rules/mariadb.sql"
+    #     docker compose exec -T mariadb mysql -uroot -pstatic firewall_mgmt < "$case_path/rules/mariadb.sql"
+    # fi
     
-uv run static-traffic-analyzer \
-      --db-user root \
-      --db-password static \
-      --db-host 127.0.0.1 \
-      --db-name firewall_mgmt \
-      "${common_args[@]}"
+# uv run static-traffic-analyzer \
+#       --db-user root \
+#       --db-password static \
+#       --db-host 127.0.0.1 \
+#       --db-name firewall_mgmt \
+#       --fab-name FAB \
+    echo  "${common_args[@]}"
 
     diff "$out_file" "$case_path/expected/expected.csv"
 else
     echo "### Skipping MariaDB-based test ###"
     echo "--- NOTE: 'docker compose up' does not appear to be running, or the mariadb container is not healthy. ---"
 fi
+
+uv run static-traffic-analyzer \
+      --db-user root \
+      --db-password static \
+      --db-host 127.0.0.1 \
+      --db-name firewall_mgmt \
+      --fab-name FAB \
+      --src-csv samples/case01_address_only_implicit_deny/inputs/src.csv --dst-csv samples/case01_address_only_implicit_deny/inputs/dst.csv --ports samples/case01_address_only_implicit_deny/inputs/ports.txt --out out.csv

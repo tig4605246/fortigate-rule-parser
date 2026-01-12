@@ -178,13 +178,22 @@ def evaluate_policy(
             )
 
         decision = Decision.ALLOW if policy.action.lower() == "accept" else Decision.DENY
-        return MatchDetail(
-            decision=decision,
-            matched_policy_id=policy.policy_id,
-            matched_policy_name=policy.name,
-            matched_policy_action=policy.action,
-            reason="MATCHED_POLICY",
-        )
+        if decision == Decision.ALLOW:
+            return MatchDetail(
+                decision=decision,
+                matched_policy_id=policy.policy_id,
+                matched_policy_name=policy.name,
+                matched_policy_action=policy.action,
+                reason="MATCH_POLICY_ACCEPT",
+            )
+        elif decision == Decision.DENY:
+            return MatchDetail(
+                decision=decision,
+                matched_policy_id=policy.policy_id,
+                matched_policy_name=policy.name,
+                matched_policy_action=policy.action,
+                reason="MATCH_POLICY_DENY",
+            )
 
     return MatchDetail(
         decision=Decision.DENY,

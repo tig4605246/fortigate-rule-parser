@@ -57,8 +57,8 @@ CREATE TABLE cfg_policy (
   updated_at TIMESTAMP NULL
 );
 INSERT INTO cfg_address (fab_name, firewall_id, object_name, address_type, subnet) VALUES
-  ('FAB', 'FW1', 'SRC_HOST_20_10', 'subnet', '192.168.20.10/32'),
-  ('FAB', 'FW1', 'DST_DB_HOST', 'subnet', '10.0.1.5/32');
+  ('FAB', 'FW1', 'SRC_HOST_20_10', 'ipmask', '192.168.20.10/32'),
+  ('FAB', 'FW1', 'DST_DB_HOST', 'ipmask', '10.0.1.5/32');
 
 INSERT INTO cfg_service_group (fab_name, firewall_id, group_name, members) VALUES
   ('FAB', 'FW1', 'SG_DB_CUSTOM', '["tcp_8001-8004"]');

@@ -146,7 +146,7 @@ def parse_fortigate_config(lines: Iterable[str]) -> FortiGateData:
         policies.append(
             PolicyRule(
                 policy_id=policy_id,
-                name=name.strip('"'),
+                name=str(policy_id),
                 priority=int(policy_id) if policy_id.isdigit() else len(policies) + 1,
                 source=_split_fortigate_members(srcaddr),
                 destination=_split_fortigate_members(dstaddr),

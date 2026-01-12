@@ -57,7 +57,6 @@ def _write_output(
         "port",
         "decision",
         "matched_policy_id",
-        "matched_policy_name",
         "matched_policy_action",
         "reason",
     ]
@@ -77,6 +76,7 @@ def main() -> None:
     parser.add_argument("--db-password", help="MariaDB password")
     parser.add_argument("--db-host", help="MariaDB host")
     parser.add_argument("--db-name", help="MariaDB database")
+    parser.add_argument("--fab-name", help="Fabrication plant name to filter rules")
     parser.add_argument("--src-csv", required=True, help="Source CIDR list CSV")
     parser.add_argument("--dst-csv", required=True, help="Destination CIDR list CSV")
     parser.add_argument("--ports", required=True, help="Ports list file")
@@ -119,6 +119,7 @@ def main() -> None:
                 password=args.db_password,
                 host=args.db_host,
                 database=args.db_name,
+                fab_name=args.fab_name,
             )
 
         src_records = _load_csv_networks(Path(args.src_csv), "Network Segment")
@@ -156,7 +157,6 @@ def main() -> None:
                             "port": port_spec.port,
                             "decision": match.decision.value,
                             "matched_policy_id": match.matched_policy_id or "",
-                            "matched_policy_name": match.matched_policy_name or "",
                             "matched_policy_action": match.matched_policy_action or "",
                             "reason": match.reason,
                         }

@@ -30,7 +30,9 @@ def _require_connector() -> Any:
     return mysql.connector
 
 
-def parse_database(user: str, password: str, host: str, database: str) -> DatabaseData:
+def parse_database(
+    user: str, password: str, host: str, database: str, fab_name: str | None = None
+) -> DatabaseData:
     """Load MariaDB firewall tables into internal models."""
     connector = _require_connector()
     connection = connector.connect(
@@ -45,7 +47,14 @@ def parse_database(user: str, password: str, host: str, database: str) -> Databa
     service_book = ServiceBook()
     policies: list[PolicyRule] = []
 
-    cursor.execute("SELECT object_name, address_type, subnet, start_ip, end_ip FROM cfg_address")
+    params = (fab_name,) if fab_name else None
+    where_clause = " WHERE fab_name = %s" if fab_name else ""
+
+    cursor.execute(
+        "SELECT object_name, address_type, subnet, start_ip, end_ip FROM cfg_address"
+        + where_clause,
+        params,
+    )
     for row in cursor:
         name = str(row["object_name"])
         try:
@@ -57,21 +66,34 @@ def parse_database(user: str, password: str, host: str, database: str) -> Databa
                 end_ip=row.get("end_ip"),
             )
         except ParseError:
-            address_book.objects[name] = parse_address_object(name=name, address_type="fqdn")
-
-    cursor.execute("SELECT group_name, members FROM cfg_address_group")
-    for row in cursor:
-        members = tuple(parse_json_array(row.get("members", "[]")))
-        address_book.groups[str(row["group_name"])] = AddressGroup(name=str(row["group_name"]), members=members)
-
-    cursor.execute("SELECT group_name, members FROM cfg_service_group")
-    for row in cursor:
-        members = tuple(parse_json_array(row.get("members", "[]")))
-        service_book.groups[str(row["group_name"])] = ServiceGroup(name=str(row["group_name"]), members=members)
+            print("address parse error")
+            print(str(row["address_type"]))
+            address_book.objects[name] = parse_address_object(
+                name=name, address_type="fqdn"
+            )
 
     cursor.execute(
-        "SELECT priority, src_objects, dst_objects, service_object, action, is_enabled, log_traffic, comments "
-        "FROM cfg_policy"
+        "SELECT group_name, members FROM cfg_address_group" + where_clause, params
+    )
+    for row in cursor:
+        members = tuple(parse_json_array(row.get("members", "[]")))
+        address_book.groups[str(row["group_name"])] = AddressGroup(
+            name=str(row["group_name"]), members=members
+        )
+
+    cursor.execute(
+        "SELECT group_name, members FROM cfg_service_group" + where_clause, params
+    )
+    for row in cursor:
+        members = tuple(parse_json_array(row.get("members", "[]")))
+        service_book.groups[str(row["group_name"])] = ServiceGroup(
+            name=str(row["group_name"]), members=members
+        )
+
+    cursor.execute(
+        "SELECT priority, policy_id, src_objects, dst_objects, service_object, action, is_enabled, log_traffic, comments "
+        "FROM cfg_policy" + where_clause,
+        params,
     )
     for row in cursor:
         src_objects = parse_json_array(row.get("src_objects", "[]"))
@@ -85,8 +107,8 @@ def parse_database(user: str, password: str, host: str, database: str) -> Databa
             services = [str(service_object)]
         policies.append(
             PolicyRule(
-                policy_id=str(row["priority"]),
-                name=str(row["priority"]),
+                policy_id=str(row["policy_id"]),
+                name=str(row["policy_id"]),
                 priority=int(row["priority"]),
                 source=tuple(src_objects),
                 destination=tuple(dst_objects),
