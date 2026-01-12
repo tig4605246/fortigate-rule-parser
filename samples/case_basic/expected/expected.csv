@@ -1,9 +1,0 @@
-src_network_segment,dst_network_segment,dst_gn,dst_site,dst_location,service_label,protocol,port,decision,matched_policy_id,matched_policy_name,matched_policy_action,reason
-10.10.0.0/24,172.16.0.0/24,,,,WEB_HTTP,tcp,80,ALLOW,3,3,accept,MATCHED_POLICY
-10.10.0.0/24,172.16.0.0/24,,,,ADMIN_SSH,tcp,22,DENY,,,,IMPLICIT_DENY
-10.10.0.0/24,172.16.1.5/32,,,,WEB_HTTP,tcp,80,DENY,2,2,deny,MATCHED_POLICY
-10.10.0.0/24,172.16.1.5/32,,,,ADMIN_SSH,tcp,22,DENY,2,2,deny,MATCHED_POLICY
-10.10.1.10/32,172.16.0.0/24,,,,WEB_HTTP,tcp,80,DENY,,,,IMPLICIT_DENY
-10.10.1.10/32,172.16.0.0/24,,,,ADMIN_SSH,tcp,22,DENY,,,,IMPLICIT_DENY
-10.10.1.10/32,172.16.1.5/32,,,,WEB_HTTP,tcp,80,DENY,2,2,deny,MATCHED_POLICY
-10.10.1.10/32,172.16.1.5/32,,,,ADMIN_SSH,tcp,22,ALLOW,1,1,accept,MATCHED_POLICY

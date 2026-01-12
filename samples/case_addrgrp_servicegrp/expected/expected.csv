@@ -1,9 +1,0 @@
-src_network_segment,dst_network_segment,dst_gn,dst_site,dst_location,service_label,protocol,port,decision,matched_policy_id,matched_policy_name,matched_policy_action,reason
-10.50.0.0/24,172.50.0.0/24,,,,DNS_UDP,udp,53,ALLOW,1,1,accept,MATCHED_POLICY
-10.50.0.0/24,172.50.0.0/24,,,,APP_TCP,tcp,8080,ALLOW,1,1,accept,MATCHED_POLICY
-10.50.0.0/24,172.51.0.0/24,,,,DNS_UDP,udp,53,DENY,2,2,deny,MATCHED_POLICY
-10.50.0.0/24,172.51.0.0/24,,,,APP_TCP,tcp,8080,DENY,2,2,deny,MATCHED_POLICY
-10.51.0.0/24,172.50.0.0/24,,,,DNS_UDP,udp,53,DENY,3,3,deny,MATCHED_POLICY
-10.51.0.0/24,172.50.0.0/24,,,,APP_TCP,tcp,8080,DENY,3,3,deny,MATCHED_POLICY
-10.51.0.0/24,172.51.0.0/24,,,,DNS_UDP,udp,53,DENY,,,,IMPLICIT_DENY
-10.51.0.0/24,172.51.0.0/24,,,,APP_TCP,tcp,8080,DENY,,,,IMPLICIT_DENY

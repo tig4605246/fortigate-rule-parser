@@ -1,0 +1,13 @@
+src_network_segment,dst_network_segment,dst_gn,dst_site,dst_location,service_label,protocol,port,decision,matched_policy_id,matched_policy_name,matched_policy_action,reason
+192.168.10.0/24,10.0.0.0/24,GN01,HSINCHU,WEB,http,tcp,80,ALLOW,52,allow-web-http-from-src-all,accept,MATCH_POLICY_ACCEPT
+192.168.10.0/24,10.0.0.0/24,GN01,HSINCHU,WEB,custom8002,tcp,8002,DENY,,,,IMPLICIT_DENY
+192.168.10.0/24,10.0.0.0/24,GN01,HSINCHU,WEB,ssh,tcp,22,DENY,,,,IMPLICIT_DENY
+192.168.10.0/24,10.0.1.5/32,GN01,HSINCHU,DB,http,tcp,80,DENY,51,deny-all-to-sensitive,deny,MATCH_POLICY_DENY
+192.168.10.0/24,10.0.1.5/32,GN01,HSINCHU,DB,custom8002,tcp,8002,DENY,51,deny-all-to-sensitive,deny,MATCH_POLICY_DENY
+192.168.10.0/24,10.0.1.5/32,GN01,HSINCHU,DB,ssh,tcp,22,DENY,51,deny-all-to-sensitive,deny,MATCH_POLICY_DENY
+192.168.20.10/32,10.0.0.0/24,GN01,HSINCHU,WEB,http,tcp,80,ALLOW,52,allow-web-http-from-src-all,accept,MATCH_POLICY_ACCEPT
+192.168.20.10/32,10.0.0.0/24,GN01,HSINCHU,WEB,custom8002,tcp,8002,DENY,,,,IMPLICIT_DENY
+192.168.20.10/32,10.0.0.0/24,GN01,HSINCHU,WEB,ssh,tcp,22,DENY,,,,IMPLICIT_DENY
+192.168.20.10/32,10.0.1.5/32,GN01,HSINCHU,DB,http,tcp,80,DENY,51,deny-all-to-sensitive,deny,MATCH_POLICY_DENY
+192.168.20.10/32,10.0.1.5/32,GN01,HSINCHU,DB,custom8002,tcp,8002,ALLOW,50,allow-db-custom-range-host,accept,MATCH_POLICY_ACCEPT
+192.168.20.10/32,10.0.1.5/32,GN01,HSINCHU,DB,ssh,tcp,22,DENY,51,deny-all-to-sensitive,deny,MATCH_POLICY_DENY

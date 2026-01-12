@@ -1,0 +1,2 @@
+src_network_segment,dst_network_segment,dst_gn,dst_site,dst_location,service_label,protocol,port,decision,matched_policy_id,matched_policy_name,matched_policy_action,reason
+192.168.10.0/24,10.0.0.0/24,GN01,HSINCHU,WEB,http,tcp,80,DENY,30,deny-all-src10-to-web,deny,MATCH_POLICY_DENY

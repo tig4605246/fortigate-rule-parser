@@ -1,3 +1,0 @@
-src_network_segment,dst_network_segment,dst_gn,dst_site,dst_location,service_label,protocol,port,decision,matched_policy_id,matched_policy_name,matched_policy_action,reason
-10.40.0.0/24,172.40.0.0/24,,,,WEB_HTTP,tcp,80,DENY,2,2,deny,MATCHED_POLICY
-10.40.0.0/24,172.40.0.0/24,,,,ADMIN_SSH,tcp,22,ALLOW,3,3,accept,MATCHED_POLICY
