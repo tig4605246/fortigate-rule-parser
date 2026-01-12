@@ -46,7 +46,7 @@ def parse_database(user: str, password: str, host: str, database: str) -> Databa
     policies: list[PolicyRule] = []
 
     cursor.execute("SELECT object_name, address_type, subnet, start_ip, end_ip FROM cfg_address")
-    for row in cursor.fetchall():
+    for row in cursor:
         name = str(row["object_name"])
         try:
             address_book.objects[name] = parse_address_object(
@@ -60,12 +60,12 @@ def parse_database(user: str, password: str, host: str, database: str) -> Databa
             address_book.objects[name] = parse_address_object(name=name, address_type="fqdn")
 
     cursor.execute("SELECT group_name, members FROM cfg_address_group")
-    for row in cursor.fetchall():
+    for row in cursor:
         members = tuple(parse_json_array(row.get("members", "[]")))
         address_book.groups[str(row["group_name"])] = AddressGroup(name=str(row["group_name"]), members=members)
 
     cursor.execute("SELECT group_name, members FROM cfg_service_group")
-    for row in cursor.fetchall():
+    for row in cursor:
         members = tuple(parse_json_array(row.get("members", "[]")))
         service_book.groups[str(row["group_name"])] = ServiceGroup(name=str(row["group_name"]), members=members)
 
@@ -73,7 +73,7 @@ def parse_database(user: str, password: str, host: str, database: str) -> Databa
         "SELECT priority, src_objects, dst_objects, service_object, action, is_enabled, log_traffic, comments "
         "FROM cfg_policy"
     )
-    for row in cursor.fetchall():
+    for row in cursor:
         src_objects = parse_json_array(row.get("src_objects", "[]"))
         dst_objects = parse_json_array(row.get("dst_objects", "[]"))
         service_object = row.get("service_object")

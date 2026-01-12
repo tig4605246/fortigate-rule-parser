@@ -25,6 +25,17 @@ class FortiGateData:
     policies: list[PolicyRule]
 
 
+def _split_fortigate_members(members: str | list[str]) -> tuple[str, ...]:
+    """Split FortiGate member strings into a tuple of members."""
+    all_members = []
+    if isinstance(members, str):
+        all_members.extend(members.split())
+    elif isinstance(members, list):
+        for member_str in members:
+            all_members.extend(member_str.split())
+    return tuple(member.strip('"') for member in all_members if member)
+
+
 def parse_fortigate_config(lines: Iterable[str]) -> FortiGateData:
     """Parse a FortiGate CLI configuration file into internal models."""
     address_book = AddressBook()
@@ -76,9 +87,7 @@ def parse_fortigate_config(lines: Iterable[str]) -> FortiGateData:
         if not current_name:
             return
         members = current_fields.get("member", [])
-        if isinstance(members, str):
-            members = [members]
-        cleaned = tuple(member.strip('"') for member in members if member)
+        cleaned = _split_fortigate_members(members)
         address_book.groups[current_name] = AddressGroup(name=current_name, members=cleaned)
         current_name = None
         current_fields = {}
@@ -116,9 +125,7 @@ def parse_fortigate_config(lines: Iterable[str]) -> FortiGateData:
         if not current_name:
             return
         members = current_fields.get("member", [])
-        if isinstance(members, str):
-            members = [members]
-        cleaned = tuple(member.strip('"') for member in members if member)
+        cleaned = _split_fortigate_members(members)
         service_book.groups[current_name] = ServiceGroup(name=current_name, members=cleaned)
         current_name = None
         current_fields = {}
@@ -135,20 +142,15 @@ def parse_fortigate_config(lines: Iterable[str]) -> FortiGateData:
         action = str(current_fields.get("action", "deny"))
         schedule = current_fields.get("schedule")
         status = str(current_fields.get("status", "enable"))
-        if isinstance(srcaddr, str):
-            srcaddr = [srcaddr]
-        if isinstance(dstaddr, str):
-            dstaddr = [dstaddr]
-        if isinstance(service, str):
-            service = [service]
+
         policies.append(
             PolicyRule(
                 policy_id=policy_id,
                 name=name.strip('"'),
                 priority=int(policy_id) if policy_id.isdigit() else len(policies) + 1,
-                source=tuple(item.strip('"') for item in srcaddr if item),
-                destination=tuple(item.strip('"') for item in dstaddr if item),
-                services=tuple(item.strip('"') for item in service if item),
+                source=_split_fortigate_members(srcaddr),
+                destination=_split_fortigate_members(dstaddr),
+                services=_split_fortigate_members(service),
                 action=action,
                 enabled=status.lower() == "enable",
                 schedule=schedule.strip('"') if isinstance(schedule, str) else None,
