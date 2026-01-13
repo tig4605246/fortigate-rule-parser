@@ -37,3 +37,44 @@ If you want a local MariaDB with sample rules, use `docker-compose.yaml` and sta
 ```sh
 docker compose up -d
 ```
+
+## Tutorial: run with Python directly
+
+This walkthrough shows how to execute the CLI straight from the repository using a Python command,
+without relying on an installed console script.
+
+### 1) Create and activate a virtual environment
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 2) Install dependencies
+
+Install the base dependencies (required for the CLI and Excel parsing):
+
+```sh
+pip install -e .
+```
+
+If you plan to parse rules from MariaDB, also install the database extras:
+
+```sh
+pip install -e ".[db]"
+```
+
+### 3) Run the CLI with `python -m`
+
+From the repository root, execute the module directly and point to any of the sample inputs:
+
+```sh
+PYTHONPATH=src python3 -m static_traffic_analyzer.cli \
+  --config samples/case02_addrgrp_basic/rules/fortigate.conf \
+  --src-csv samples/case02_addrgrp_basic/inputs/src.csv \
+  --dst-csv samples/case02_addrgrp_basic/inputs/dst.csv \
+  --ports samples/case02_addrgrp_basic/inputs/ports.txt \
+  --out out.csv
+```
+
+The resulting CSV will be written to `out.csv` in the current directory.
