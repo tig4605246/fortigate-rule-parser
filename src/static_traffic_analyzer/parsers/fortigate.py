@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable
+import socket
 
 from ..catalog import DEFAULT_SERVICES
 from ..models import (
@@ -127,6 +128,26 @@ def parse_fortigate_config(lines: Iterable[str]) -> FortiGateData:
         members = current_fields.get("member", [])
         cleaned = _split_fortigate_members(members)
         service_book.groups[current_name] = ServiceGroup(name=current_name, members=cleaned)
+
+        for member in cleaned:
+            if member in service_book.services or member in service_book.groups:
+                continue
+
+            if member.lower().startswith("tcp_") or member.lower().startswith("udp_"):
+                try:
+                    service_book.services[member] = ServiceObject(
+                        name=member, entries=(parse_service_entry(member),)
+                    )
+                except ParseError:
+                    pass  # May not be a valid entry, or defined later
+            else:
+                try:
+                    service_book.services[member] = ServiceObject(
+                        name=member, entries=(socket.getservbyname(member),)
+                    )
+                except (OSError, TypeError):
+                    pass  # Might be a custom service defined later.
+
         current_name = None
         current_fields = {}
 
@@ -135,7 +156,7 @@ def parse_fortigate_config(lines: Iterable[str]) -> FortiGateData:
         if not current_name:
             return
         policy_id = current_name
-        name = str(current_fields.get("name", "no-name"))
+        name = str(current_fields.get("name", "no-name")).strip('"')
         srcaddr = current_fields.get("srcaddr", [])
         dstaddr = current_fields.get("dstaddr", [])
         service = current_fields.get("service", [])
@@ -143,14 +164,34 @@ def parse_fortigate_config(lines: Iterable[str]) -> FortiGateData:
         schedule = current_fields.get("schedule")
         status = str(current_fields.get("status", "enable"))
 
+        cleaned_services = _split_fortigate_members(service)
+        for member in cleaned_services:
+            if member in service_book.services or member in service_book.groups:
+                continue
+
+            if member.lower().startswith("tcp_") or member.lower().startswith("udp_"):
+                try:
+                    service_book.services[member] = ServiceObject(
+                        name=member, entries=(parse_service_entry(member),)
+                    )
+                except ParseError:
+                    pass
+            else:
+                try:
+                    service_book.services[member] = ServiceObject(
+                        name=member, entries=(socket.getservbyname(member),)
+                    )
+                except (OSError, TypeError):
+                    pass
+
         policies.append(
             PolicyRule(
                 policy_id=policy_id,
-                name=str(policy_id),
+                name=name,
                 priority=int(policy_id) if policy_id.isdigit() else len(policies) + 1,
                 source=_split_fortigate_members(srcaddr),
                 destination=_split_fortigate_members(dstaddr),
-                services=_split_fortigate_members(service),
+                services=cleaned_services,
                 action=action,
                 enabled=status.lower() == "enable",
                 schedule=schedule.strip('"') if isinstance(schedule, str) else None,

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable
+import socket
 
 from openpyxl import load_workbook
 
@@ -152,6 +153,11 @@ def parse_excel(path: str) -> ExcelData:
                 try:
                     service_book.services[member] = ServiceObject(name=member, entries=(parse_service_entry(member),))
                 except ParseError:
+                    continue
+            else:
+                try:
+                    service_book.services[member] = ServiceObject(name=member, entries=(socket.getservbyname(member),))
+                except (OSError, TypeError):
                     continue
 
     policies.sort(key=lambda rule: rule.priority)

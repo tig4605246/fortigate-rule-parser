@@ -48,7 +48,7 @@ CREATE TABLE cfg_policy (
   policy_id INT(10) UNSIGNED NOT NULL,
   src_objects LONGTEXT NOT NULL,
   dst_objects LONGTEXT NOT NULL,
-  service_object LONGTEXT NOT NULL,
+  service_objects LONGTEXT NOT NULL,
   action VARCHAR(16) NOT NULL,
   is_enabled VARCHAR(16) NOT NULL,
   log_traffic VARCHAR(16) NULL,
@@ -68,8 +68,9 @@ INSERT INTO cfg_address_group (fab_name, firewall_id, group_name, members) VALUE
 
 INSERT INTO cfg_service_group (fab_name, firewall_id, group_name, members) VALUES
   ('FAB', 'FW1', 'SG_DB_CUSTOM', '["tcp_8001-8004","DNS"]');
+  -- ('FAB', 'FW1', 'SG_DB_CUSTOM', '["russia_doll"]');
 
-INSERT INTO cfg_policy (fab_name, firewall_id, priority, policy_id, src_objects, dst_objects, service_object, action, is_enabled, log_traffic, comments)
+INSERT INTO cfg_policy (fab_name, firewall_id, priority, policy_id, src_objects, dst_objects, service_objects, action, is_enabled, log_traffic, comments)
 VALUES
   ( 'FAB', 'FW1', 50, 50, '["SRC_HOST_20_10"]', '["DST_DB_HOST"]', '["SG_DB_CUSTOM"]', 'accept', 'enable', 'all', 'allow host to db on custom range'),
   ( 'FAB', 'FW1', 51, 51, '["SRC_ALL"]', '["DST_SENSITIVE"]', '["ALL"]', 'deny',   'enable', 'all', 'deny all to sensitive db (except above)'),

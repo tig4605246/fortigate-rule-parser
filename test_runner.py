@@ -225,6 +225,9 @@ def run_case(case_path: Path, db_is_running: bool) -> bool:
                     "--fab-name",
                     "FAB",
                 ]
+                print("uv run static-traffic-analyzer" )
+                print(db_args)
+                print(common_args)
                 run_command(
                     ["uv", "run", "static-traffic-analyzer"] + db_args + common_args
                 )

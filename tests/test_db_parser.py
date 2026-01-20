@@ -22,22 +22,21 @@ def test_parse_database_buffered():
     policy_data = [
         {
             "priority": 1,
+            "policy_id": "1",
             "src_objects": '["agrp1"]',
-            "dst_objects": '["any"]',
-            "service_object": '["sgrp1"]',
-            "action": "accept",
-            "is_enabled": 1,
+                            "dst_objects": '["any"]',
+                            "service_objects": '["sgrp1"]',
+                            "action": "accept",            "is_enabled": 1,
             "log_traffic": 0,
             "comments": "Test policy",
         }
     ]
-
     mock_cursor = MagicMock()
     mock_cursor.__enter__.return_value = mock_cursor
 
     # This is the crucial part for testing the buffered read.
     # The mock cursor needs to be iterable.
-    def execute_effect(query):
+    def execute_effect(query, params=None):
         if "cfg_address_group" in query:
             mock_cursor.__iter__.return_value = iter(address_group_data)
         elif "cfg_address" in query:
@@ -46,7 +45,6 @@ def test_parse_database_buffered():
             mock_cursor.__iter__.return_value = iter(service_group_data)
         elif "cfg_policy" in query:
             mock_cursor.__iter__.return_value = iter(policy_data)
-
     mock_cursor.execute.side_effect = execute_effect
 
     mock_connection = MagicMock()

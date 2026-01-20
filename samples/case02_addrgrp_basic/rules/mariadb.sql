@@ -48,7 +48,7 @@ CREATE TABLE cfg_policy (
   policy_id INT(10) UNSIGNED NOT NULL,
   src_objects LONGTEXT NOT NULL,
   dst_objects LONGTEXT NOT NULL,
-  service_object LONGTEXT NOT NULL,
+  service_objects LONGTEXT NOT NULL,
   action VARCHAR(16) NOT NULL,
   is_enabled VARCHAR(16) NOT NULL,
   log_traffic VARCHAR(16) NULL,
@@ -64,6 +64,6 @@ INSERT INTO cfg_address (fab_name, firewall_id, object_name, address_type, subne
 INSERT INTO cfg_address_group (fab_name, firewall_id, group_name, members) VALUES
   ('FAB', 'FW1', 'SRC_GROUP', '["SRC_NET_10","SRC_HOST_20_10"]');
 
-INSERT INTO cfg_policy (fab_name, firewall_id, priority, policy_id, src_objects, dst_objects, service_object, action, is_enabled, log_traffic, comments)
+INSERT INTO cfg_policy (fab_name, firewall_id, priority, policy_id, src_objects, dst_objects, service_objects, action, is_enabled, log_traffic, comments)
 VALUES
   ('FAB', 'FW1', 20, 20, '["SRC_GROUP"]', '["DST_WEB_NET"]', '["HTTP"]', 'accept', 'enable', 'all', 'allow http from src_group to web');

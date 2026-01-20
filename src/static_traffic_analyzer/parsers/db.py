@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import socket
 from typing import Any
 
 from ..catalog import DEFAULT_SERVICES
@@ -139,6 +140,14 @@ def parse_database(
                     service_book.services[member] = ServiceObject(name=member, entries=(parse_service_entry(member),))
                 except ParseError:
                     continue
+            else:
+                try:
+                    print("check member"+member+"by getserv")
+                    service_book.services[member] = ServiceObject(name=member, entries=(socket.getservbyname(member.lower()),))
+                except (OSError, TypeError):
+                    print("error parsing service by getserv")
+                    continue 
+
 
     policies.sort(key=lambda rule: rule.priority)
 

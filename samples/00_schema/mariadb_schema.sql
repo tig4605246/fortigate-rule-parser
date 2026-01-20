@@ -48,7 +48,7 @@ CREATE TABLE cfg_policy (
   policy_id INT(10) UNSIGNED NOT NULL,
   src_objects LONGTEXT NOT NULL,
   dst_objects LONGTEXT NOT NULL,
-  service_object LONGTEXT NOT NULL,
+  service_objects LONGTEXT NOT NULL,
   action VARCHAR(16) NOT NULL,
   is_enabled VARCHAR(16) NOT NULL,
   log_traffic VARCHAR(16) NULL,

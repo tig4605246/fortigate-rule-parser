@@ -170,7 +170,7 @@ members 內容類型固定為 **JSON Array**，且可包含：
 | priority       | 數字，排序值（由小到大決定 Top–Down 評估） |
 | src_objects    | JSON Array 字串              |
 | dst_objects    | JSON Array 字串              |
-| service_object | JSON Array 或單一 service 名稱  |
+| service_objects | JSON Array 或單一 service 名稱  |
 | action         | `accept` / `deny`          |
 | is_enabled     | 0 / 1                      |
 | log_traffic    | boolean                    |
