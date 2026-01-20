@@ -57,6 +57,8 @@ def parse_database(
     )
     for row in cursor:
         name = str(row["object_name"])
+        if str(row["object_name"]).lower() == "all":
+            continue
         try:
             address_book.objects[name] = parse_address_object(
                 name=name,
@@ -91,14 +93,14 @@ def parse_database(
         )
 
     cursor.execute(
-        "SELECT priority, policy_id, src_objects, dst_objects, service_object, action, is_enabled, log_traffic, comments "
+        "SELECT priority, policy_id, src_objects, dst_objects, service_objects, action, is_enabled, log_traffic, comments "
         "FROM cfg_policy" + where_clause,
         params,
     )
     for row in cursor:
         src_objects = parse_json_array(row.get("src_objects", "[]"))
         dst_objects = parse_json_array(row.get("dst_objects", "[]"))
-        service_object = row.get("service_object")
+        service_object = row.get("service_objects")
         if isinstance(service_object, str) and service_object.strip().startswith("["):
             services = parse_json_array(service_object)
         elif service_object is None:
@@ -124,6 +126,9 @@ def parse_database(
         service_book.services.setdefault(name, service)
     if "ALL" not in service_book.services:
         service_book.services["ALL"] = make_any_service("ALL")
+    if "all" not in address_book.objects:
+        address_book.objects["all"] = parse_address_object("all", "ipmask", subnet="0.0.0.0/0")
+
 
     for group in list(service_book.groups.values()):
         for member in group.members:
