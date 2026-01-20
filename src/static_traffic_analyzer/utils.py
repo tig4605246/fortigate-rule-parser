@@ -65,6 +65,26 @@ def parse_address_object(
             address_type=AddressType.IPMASK,
             subnet=parse_ipv4_network(subnet),
         )
+    if normalized_type == "none":
+        if not start_ip or not end_ip:
+            raise ParseError(f"Missing subnet IP/mask for address object: {name}")
+        # Some exports mark subnet records as "none" while providing IP + netmask fields.
+        # Treat these as subnet definitions by building a network from the IP and netmask.
+        subnet_ip = parse_ipv4_address(start_ip)
+        subnet_mask = parse_ipv4_address(end_ip)
+        try:
+            subnet_network = ip_network(f"{subnet_ip}/{subnet_mask}", strict=False)
+        except ValueError as exc:
+            raise ParseError(
+                f"Invalid subnet IP/mask for address object: {name} ({start_ip} {end_ip})"
+            ) from exc
+        if subnet_network.version != 4:
+            raise ParseError(f"Only IPv4 is supported: {start_ip}/{end_ip}")
+        return AddressObject(
+            name=name,
+            address_type=AddressType.IPMASK,
+            subnet=subnet_network,
+        )
     if normalized_type == AddressType.IPRANGE.value:
         if not start_ip or not end_ip:
             raise ParseError(f"Missing IP range for address object: {name}")
