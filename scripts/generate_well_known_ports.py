@@ -9,7 +9,7 @@ import csv
 import socket
 from pathlib import Path
 
-WELL_KNOWN_PORTS_RANGE = range(1, 1024)
+WELL_KNOWN_PORTS_RANGE = range(1, 65535)
 
 
 def get_service_name(port: int, protocol: str = "tcp") -> str | None:
@@ -24,6 +24,7 @@ def build_rows() -> list[dict[str, str]]:
     """Build CSV rows for well-known ports with TCP/UDP service names."""
     rows: list[dict[str, str]] = []
     for port in WELL_KNOWN_PORTS_RANGE:
+        print("port"+str(port))
         tcp_service = get_service_name(port, "tcp")
         udp_service = get_service_name(port, "udp")
         if not tcp_service and not udp_service:
