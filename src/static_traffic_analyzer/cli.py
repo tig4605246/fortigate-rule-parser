@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-from dataclasses import asdict
+from ipaddress import IPv4Network
 from pathlib import Path
 from typing import Iterable
 
@@ -12,7 +12,7 @@ from .models import Decision
 from .parsers.db import parse_database
 from .parsers.excel import parse_excel
 from .parsers.fortigate import parse_fortigate_config
-from .utils import ParseError, parse_ipv4_network, parse_ports_file
+from .utils import ParseError, expand_ipv4_network, parse_ipv4_network, parse_ports_file
 
 
 def _load_csv_networks(path: Path, header_name: str) -> list[dict[str, str]]:
@@ -39,6 +39,20 @@ def _iter_ports(ports_path: Path):
     with ports_path.open(encoding="utf-8") as handle:
         for spec in parse_ports_file(handle.readlines()):
             yield spec
+
+
+def _iter_dst_networks(
+    dst_records: Iterable[dict[str, str]],
+    match_mode: MatchMode,
+) -> Iterable[tuple[dict[str, str], IPv4Network]]:
+    """Yield destination networks, expanding CIDRs when match_mode requests it."""
+    for dst_record in dst_records:
+        dst_network = parse_ipv4_network(dst_record["Network Segment"])
+        if match_mode.mode == "expand":
+            for expanded_network in expand_ipv4_network(dst_network, match_mode.max_hosts):
+                yield dst_record, expanded_network
+        else:
+            yield dst_record, dst_network
 
 
 def _write_output(
@@ -127,12 +141,13 @@ def main() -> None:
         ports = list(_iter_ports(Path(args.ports)))
 
         output_rows: list[dict[str, str | int | None]] = []
+        if args.max_hosts < 1:
+            raise ParseError("--max-hosts must be a positive integer")
         match_mode = MatchMode(mode=args.match_mode, max_hosts=args.max_hosts)
 
         for src_record in src_records:
             src_network = parse_ipv4_network(src_record["Network Segment"])
-            for dst_record in dst_records:
-                dst_network = parse_ipv4_network(dst_record["Network Segment"])
+            for dst_record, dst_network in _iter_dst_networks(dst_records, match_mode):
                 for port_spec in ports:
                     match = evaluate_policy(
                         policies=data.policies,
