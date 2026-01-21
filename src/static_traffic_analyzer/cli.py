@@ -3,16 +3,100 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass
 from ipaddress import IPv4Network
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Iterator
 
 from .evaluator import MatchMode, evaluate_policy
-from .models import Decision
+from .models import AddressBook, Decision, PolicyRule, ServiceBook
 from .parsers.db import parse_database
 from .parsers.excel import parse_excel
 from .parsers.fortigate import parse_fortigate_config
-from .utils import ParseError, expand_ipv4_network, parse_ipv4_network, parse_ports_file
+from .utils import ParseError, PortSpec, expand_ipv4_network, parse_ipv4_network, parse_ports_file
+
+
+@dataclass(frozen=True)
+class SimulationContext:
+    """Immutable container for data shared with worker processes."""
+
+    policies: tuple[PolicyRule, ...]
+    address_book: AddressBook
+    service_book: ServiceBook
+    match_mode: MatchMode
+    ignore_schedule: bool
+
+
+_WORKER_CONTEXT: SimulationContext | None = None
+
+
+@dataclass(frozen=True)
+class SimulationTask:
+    """Represents a single simulation unit of work."""
+
+    src_record: dict[str, str]
+    dst_record: dict[str, str]
+    dst_network: IPv4Network
+    port_spec: PortSpec
+
+
+def _init_worker(context: SimulationContext) -> None:
+    """Initialize worker process state for multiprocessing."""
+    global _WORKER_CONTEXT
+    _WORKER_CONTEXT = context
+
+
+def _simulate_task(task: SimulationTask) -> dict[str, str | int | None]:
+    """Run the policy simulation for a single task using shared worker context."""
+    if _WORKER_CONTEXT is None:
+        raise RuntimeError("Worker context was not initialized")
+    return _simulate_task_with_context(_WORKER_CONTEXT, task)
+
+
+def _simulate_task_with_context(
+    context: SimulationContext,
+    task: SimulationTask,
+) -> dict[str, str | int | None]:
+    """Run the policy simulation for a single task with explicit context."""
+    src_network = parse_ipv4_network(task.src_record["Network Segment"])
+    match = evaluate_policy(
+        policies=context.policies,
+        address_book=context.address_book,
+        service_book=context.service_book,
+        src_network=src_network,
+        dst_network=task.dst_network,
+        protocol=task.port_spec.protocol,
+        port=task.port_spec.port,
+        match_mode=context.match_mode,
+        ignore_schedule=context.ignore_schedule,
+    )
+    return {
+        "src_network_segment": str(src_network),
+        "dst_network_segment": str(task.dst_network),
+        "dst_gn": task.dst_record.get("GN") or "",
+        "dst_site": task.dst_record.get("Site") or "",
+        "dst_location": task.dst_record.get("Location") or "",
+        "service_label": task.port_spec.label,
+        "protocol": task.port_spec.protocol.value,
+        "port": task.port_spec.port,
+        "decision": match.decision.value,
+        "matched_policy_id": match.matched_policy_id or "",
+        "matched_policy_action": match.matched_policy_action or "",
+        "reason": match.reason,
+    }
+
+
+def _resolve_worker_count(requested: int, record_count: int) -> int:
+    """Determine the number of worker processes to use."""
+    if record_count < 1:
+        return 1
+    if requested < 0:
+        raise ParseError("--workers must be zero or a positive integer")
+    if requested == 0:
+        return min(os.cpu_count() or 1, record_count)
+    return min(requested, record_count)
 
 
 def _load_csv_networks(path: Path, header_name: str) -> list[dict[str, str]]:
@@ -53,6 +137,23 @@ def _iter_dst_networks(
                 yield dst_record, expanded_network
         else:
             yield dst_record, dst_network
+
+
+def _iter_simulation_tasks(
+    src_records: Iterable[dict[str, str]],
+    dst_networks: Iterable[tuple[dict[str, str], IPv4Network]],
+    ports: Iterable[PortSpec],
+) -> Iterator[SimulationTask]:
+    """Yield single-unit tasks for every src/dst/port combination."""
+    for src_record in src_records:
+        for dst_record, dst_network in dst_networks:
+            for port_spec in ports:
+                yield SimulationTask(
+                    src_record=src_record,
+                    dst_record=dst_record,
+                    dst_network=dst_network,
+                    port_spec=port_spec,
+                )
 
 
 def _write_output(
@@ -103,6 +204,12 @@ def main() -> None:
         help="Address match mode",
     )
     parser.add_argument("--max-hosts", type=int, default=256, help="Max hosts for expand mode")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=0,
+        help="Worker process count (0=auto, 1=disable multiprocessing)",
+    )
 
     args = parser.parse_args()
 
@@ -140,42 +247,40 @@ def main() -> None:
         dst_records = _load_csv_networks(Path(args.dst_csv), "Network Segment")
         ports = list(_iter_ports(Path(args.ports)))
 
-        output_rows: list[dict[str, str | int | None]] = []
         if args.max_hosts < 1:
             raise ParseError("--max-hosts must be a positive integer")
         match_mode = MatchMode(mode=args.match_mode, max_hosts=args.max_hosts)
+        # Build a shared context to avoid re-serializing large datasets for every task.
+        context = SimulationContext(
+            policies=tuple(data.policies),
+            address_book=data.address_book,
+            service_book=data.service_book,
+            match_mode=match_mode,
+            ignore_schedule=args.ignore_schedule,
+        )
+        # Choose a worker count that respects both the CLI input and dataset size.
+        worker_count = _resolve_worker_count(args.workers, len(src_records))
 
-        for src_record in src_records:
-            src_network = parse_ipv4_network(src_record["Network Segment"])
-            for dst_record, dst_network in _iter_dst_networks(dst_records, match_mode):
-                for port_spec in ports:
-                    match = evaluate_policy(
-                        policies=data.policies,
-                        address_book=data.address_book,
-                        service_book=data.service_book,
-                        src_network=src_network,
-                        dst_network=dst_network,
-                        protocol=port_spec.protocol,
-                        port=port_spec.port,
-                        match_mode=match_mode,
-                        ignore_schedule=args.ignore_schedule,
-                    )
-                    output_rows.append(
-                        {
-                            "src_network_segment": str(src_network),
-                            "dst_network_segment": str(dst_network),
-                            "dst_gn": dst_record.get("GN") or "",
-                            "dst_site": dst_record.get("Site") or "",
-                            "dst_location": dst_record.get("Location") or "",
-                            "service_label": port_spec.label,
-                            "protocol": port_spec.protocol.value,
-                            "port": port_spec.port,
-                            "decision": match.decision.value,
-                            "matched_policy_id": match.matched_policy_id or "",
-                            "matched_policy_action": match.matched_policy_action or "",
-                            "reason": match.reason,
-                        }
-                    )
+        dst_networks = tuple(_iter_dst_networks(dst_records, match_mode))
+        ports_tuple = tuple(ports)
+        total_tasks = len(src_records) * len(dst_networks) * len(ports_tuple)
+        output_rows: list[dict[str, str | int | None]] = []
+        if worker_count <= 1:
+            # Single-process execution avoids multiprocessing overhead for small inputs.
+            for task in _iter_simulation_tasks(src_records, dst_networks, ports_tuple):
+                output_rows.append(_simulate_task_with_context(context, task))
+        else:
+            # Multiprocessing uses chunked maps to reduce inter-process coordination overhead.
+            chunksize = max(1, total_tasks // (worker_count * 4)) if total_tasks else 1
+            with ProcessPoolExecutor(
+                max_workers=worker_count,
+                initializer=_init_worker,
+                initargs=(context,),
+            ) as executor:
+                tasks = _iter_simulation_tasks(src_records, dst_networks, ports_tuple)
+                for row in executor.map(_simulate_task, tasks, chunksize=chunksize):
+                    # Rows are appended only in the parent process, avoiding shared-state races.
+                    output_rows.append(row)
 
         _write_output(Path(args.out), output_rows)
     except ParseError as exc:
