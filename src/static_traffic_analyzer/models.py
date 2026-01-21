@@ -141,21 +141,43 @@ class AddressBook:
 
     objects: dict[str, AddressObject] = field(default_factory=dict)
     groups: dict[str, AddressGroup] = field(default_factory=dict)
+    flattened_groups: dict[str, tuple[AddressObject, ...]] = field(default_factory=dict, init=False)
 
-    def resolve_group_members(self, name: str, _visited: Optional[set[str]] = None) -> Iterable[AddressObject]:
-        """Resolve all address objects inside a group, recursively."""
+    def _flatten_group_members(self, name: str, _visited: Optional[set[str]] = None) -> tuple[AddressObject, ...]:
+        """Recursively resolve and cache all address objects for a given group name."""
+        if name in self.flattened_groups:
+            return self.flattened_groups[name]
+
         if name in self.objects:
-            return [self.objects[name]]
+            return (self.objects[name],)
+
         if name not in self.groups:
-            return []
+            return tuple()
+
         visited = _visited or set()
         if name in visited:
-            return []
+            return tuple()
         visited.add(name)
+
         resolved: list[AddressObject] = []
         for member in self.groups[name].members:
-            resolved.extend(self.resolve_group_members(member, visited))
-        return resolved
+            resolved.extend(self._flatten_group_members(member, visited))
+
+        # De-duplicate and cache the results
+        unique_resolved = tuple(sorted(list(set(resolved)), key=lambda x: x.name))
+        self.flattened_groups[name] = unique_resolved
+        return unique_resolved
+
+    def flatten_all_groups(self) -> None:
+        """Eagerly resolve all groups to populate the cache."""
+        for name in self.groups:
+            self.resolve_group_members(name)
+
+    def resolve_group_members(self, name: str) -> tuple[AddressObject, ...]:
+        """Resolve all address objects inside a group, using the cache."""
+        if name in self.flattened_groups:
+            return self.flattened_groups[name]
+        return self._flatten_group_members(name)
 
 
 @dataclass
@@ -164,18 +186,40 @@ class ServiceBook:
 
     services: dict[str, ServiceObject] = field(default_factory=dict)
     groups: dict[str, ServiceGroup] = field(default_factory=dict)
+    flattened_groups: dict[str, tuple[ServiceObject, ...]] = field(default_factory=dict, init=False)
 
-    def resolve_group_members(self, name: str, _visited: Optional[set[str]] = None) -> Iterable[ServiceObject]:
-        """Resolve all service objects inside a group, recursively."""
+    def _flatten_group_members(self, name: str, _visited: Optional[set[str]] = None) -> tuple[ServiceObject, ...]:
+        """Recursively resolve and cache all service objects for a given group name."""
+        if name in self.flattened_groups:
+            return self.flattened_groups[name]
+
         if name in self.services:
-            return [self.services[name]]
+            return (self.services[name],)
+
         if name not in self.groups:
-            return []
+            return tuple()
+
         visited = _visited or set()
         if name in visited:
-            return []
+            return tuple()
         visited.add(name)
+
         resolved: list[ServiceObject] = []
         for member in self.groups[name].members:
-            resolved.extend(self.resolve_group_members(member, visited))
-        return resolved
+            resolved.extend(self._flatten_group_members(member, visited))
+
+        # De-duplicate and cache the results
+        unique_resolved = tuple(sorted(list(set(resolved)), key=lambda x: x.name))
+        self.flattened_groups[name] = unique_resolved
+        return unique_resolved
+
+    def flatten_all_groups(self) -> None:
+        """Eagerly resolve all groups to populate the cache."""
+        for name in self.groups:
+            self.resolve_group_members(name)
+
+    def resolve_group_members(self, name: str) -> tuple[ServiceObject, ...]:
+        """Resolve all service objects inside a group, using the cache."""
+        if name in self.flattened_groups:
+            return self.flattened_groups[name]
+        return self._flatten_group_members(name)

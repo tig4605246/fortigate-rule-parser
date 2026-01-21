@@ -210,6 +210,7 @@ def main() -> None:
         default=0,
         help="Worker process count (0=auto, 1=disable multiprocessing)",
     )
+    parser.add_argument("--filter-policy-id", help="Only output results matching this Policy ID")
 
     args = parser.parse_args()
 
@@ -250,6 +251,11 @@ def main() -> None:
         if args.max_hosts < 1:
             raise ParseError("--max-hosts must be a positive integer")
         match_mode = MatchMode(mode=args.match_mode, max_hosts=args.max_hosts)
+
+        # Eagerly resolve all group memberships to optimize the simulation hot path.
+        data.address_book.flatten_all_groups()
+        data.service_book.flatten_all_groups()
+
         # Build a shared context to avoid re-serializing large datasets for every task.
         context = SimulationContext(
             policies=tuple(data.policies),
@@ -268,7 +274,10 @@ def main() -> None:
         if worker_count <= 1:
             # Single-process execution avoids multiprocessing overhead for small inputs.
             for task in _iter_simulation_tasks(src_records, dst_networks, ports_tuple):
-                output_rows.append(_simulate_task_with_context(context, task))
+                row = _simulate_task_with_context(context, task)
+                if args.filter_policy_id and str(row["matched_policy_id"]) != args.filter_policy_id:
+                    continue
+                output_rows.append(row)
         else:
             # Multiprocessing uses chunked maps to reduce inter-process coordination overhead.
             chunksize = max(1, total_tasks // (worker_count * 4)) if total_tasks else 1
@@ -280,6 +289,8 @@ def main() -> None:
                 tasks = _iter_simulation_tasks(src_records, dst_networks, ports_tuple)
                 for row in executor.map(_simulate_task, tasks, chunksize=chunksize):
                     # Rows are appended only in the parent process, avoiding shared-state races.
+                    if args.filter_policy_id and str(row["matched_policy_id"]) != args.filter_policy_id:
+                        continue
                     output_rows.append(row)
 
         _write_output(Path(args.out), output_rows)
