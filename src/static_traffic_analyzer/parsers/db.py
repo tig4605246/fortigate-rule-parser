@@ -6,7 +6,16 @@ import socket
 from typing import Any
 
 from ..catalog import DEFAULT_SERVICES
-from ..models import AddressBook, AddressGroup, PolicyRule, ServiceBook, ServiceGroup, ServiceObject
+from ..models import (
+    AddressBook,
+    AddressGroup,
+    PolicyRule,
+    Protocol,
+    ServiceBook,
+    ServiceEntry,
+    ServiceGroup,
+    ServiceObject,
+)
 from ..utils import ParseError, make_any_service, parse_address_object, parse_json_array, parse_service_entry
 
 
@@ -47,6 +56,44 @@ def parse_database(
     address_book = AddressBook()
     service_book = ServiceBook()
     policies: list[PolicyRule] = []
+
+    def register_service_name(service_name: str) -> None:
+        """Register a service name into the service book if it is missing.
+
+        This handles service references that only appear in policies by:
+        - Parsing explicit tcp_/udp_ service strings into concrete entries.
+        - Falling back to well-known ports for named services (e.g., "http").
+        - Respecting existing service definitions or groups to avoid overwrites.
+        """
+        normalized = str(service_name).strip()
+        if not normalized:
+            return
+        if normalized in service_book.services or normalized in service_book.groups:
+            return
+        if normalized.upper() == "ALL":
+            service_book.services.setdefault("ALL", make_any_service("ALL"))
+            return
+        if normalized.lower().startswith(("tcp_", "udp_")):
+            try:
+                entry = parse_service_entry(normalized)
+            except ParseError:
+                return
+            service_book.services[normalized] = ServiceObject(
+                name=normalized,
+                entries=(entry,),
+            )
+            return
+        try:
+            port = socket.getservbyname(normalized.lower())
+        except (OSError, TypeError):
+            return
+        service_book.services[normalized] = ServiceObject(
+            name=normalized,
+            entries=(
+                ServiceEntry(protocol=Protocol.TCP, start_port=port, end_port=port),
+                ServiceEntry(protocol=Protocol.UDP, start_port=port, end_port=port),
+            ),
+        )
 
     params = (fab_name,) if fab_name else None
     where_clause = " WHERE fab_name = %s" if fab_name else ""
@@ -108,6 +155,8 @@ def parse_database(
             services = []
         else:
             services = [str(service_object)]
+        for service_name in services:
+            register_service_name(service_name)
         policies.append(
             PolicyRule(
                 policy_id=str(row["policy_id"]),
@@ -133,20 +182,7 @@ def parse_database(
 
     for group in list(service_book.groups.values()):
         for member in group.members:
-            if member in service_book.services:
-                continue
-            if member.lower().startswith("tcp_") or member.lower().startswith("udp_"):
-                try:
-                    service_book.services[member] = ServiceObject(name=member, entries=(parse_service_entry(member),))
-                except ParseError:
-                    continue
-            else:
-                try:
-                    print("check member"+member+"by getserv")
-                    service_book.services[member] = ServiceObject(name=member, entries=(socket.getservbyname(member.lower()),))
-                except (OSError, TypeError):
-                    print("error parsing service by getserv")
-                    continue 
+            register_service_name(member)
 
 
     policies.sort(key=lambda rule: rule.priority)
