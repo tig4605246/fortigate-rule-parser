@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import socket
+import logging
 from typing import Any
 
 from ..catalog import DEFAULT_SERVICES
@@ -44,6 +45,7 @@ def parse_database(
     user: str, password: str, host: str, database: str, fab_name: str | None = None
 ) -> DatabaseData:
     """Load MariaDB firewall tables into internal models."""
+    logger = logging.getLogger(__name__)
     connector = _require_connector()
     connection = connector.connect(
         user=user,
@@ -115,9 +117,13 @@ def parse_database(
                 start_ip=row.get("start_ip"),
                 end_ip=row.get("end_ip"),
             )
-        except ParseError:
-            print("address parse error")
-            print(str(row["address_type"]))
+        except ParseError as exc:
+            logger.warning(
+                "Address parse error for %s (type=%s): %s",
+                name,
+                row.get("address_type"),
+                exc,
+            )
             address_book.objects[name] = parse_address_object(
                 name=name, address_type="fqdn"
             )
