@@ -48,6 +48,18 @@ def parse_ipv4_address(value: str) -> IPv4Address:
     return address
 
 
+def expand_ipv4_network(network: IPv4Network, max_hosts: int) -> list[IPv4Network]:
+    """Expand a network into /32 host networks when within the max_hosts limit."""
+    if max_hosts < 1:
+        raise ParseError("max_hosts must be a positive integer")
+    if network.num_addresses > max_hosts:
+        return [network]
+    hosts = list(network.hosts())
+    if not hosts:
+        hosts = [network.network_address]
+    return [IPv4Network(f"{host}/32") for host in hosts]
+
+
 def parse_address_object(
     name: str,
     address_type: str,
