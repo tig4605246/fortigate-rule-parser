@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from ipaddress import IPv4Network
+from multiprocessing import Queue
 from pathlib import Path
 from typing import Iterable, Iterator
 
@@ -15,6 +17,7 @@ from .models import AddressBook, Decision, PolicyRule, ServiceBook
 from .parsers.db import parse_database
 from .parsers.excel import parse_excel
 from .parsers.fortigate import parse_fortigate_config
+from .logging_utils import configure_logging, configure_worker_logging, stop_listener
 from .utils import ParseError, PortSpec, expand_ipv4_network, parse_ipv4_network, parse_ports_file
 
 
@@ -27,6 +30,8 @@ class SimulationContext:
     service_book: ServiceBook
     match_mode: MatchMode
     ignore_schedule: bool
+    log_queue: Queue | None
+    log_level: str
 
 
 _WORKER_CONTEXT: SimulationContext | None = None
@@ -45,6 +50,7 @@ class SimulationTask:
 def _init_worker(context: SimulationContext) -> None:
     """Initialize worker process state for multiprocessing."""
     global _WORKER_CONTEXT
+    configure_worker_logging(context.log_queue, context.log_level)
     _WORKER_CONTEXT = context
 
 
@@ -60,7 +66,16 @@ def _simulate_task_with_context(
     task: SimulationTask,
 ) -> dict[str, str | int | None]:
     """Run the policy simulation for a single task with explicit context."""
+    logger = logging.getLogger(__name__)
     src_network = parse_ipv4_network(task.src_record["Network Segment"])
+    logger.debug(
+        "Evaluating policy for src=%s dst=%s proto=%s port=%s label=%s",
+        src_network,
+        task.dst_network,
+        task.port_spec.protocol.value,
+        task.port_spec.port,
+        task.port_spec.label,
+    )
     match = evaluate_policy(
         policies=context.policies,
         address_book=context.address_book,
@@ -211,10 +226,23 @@ def main() -> None:
         help="Worker process count (0=auto, 1=disable multiprocessing)",
     )
     parser.add_argument("--filter-policy-id", help="Only output results matching this Policy ID")
+    parser.add_argument(
+        "--log-level",
+        default="info",
+        choices=["debug", "info", "warning", "error", "fatal"],
+        help="Logging verbosity (debug, info, warning, error, fatal)",
+    )
+    parser.add_argument(
+        "--log-file",
+        help="Optional log file path (defaults to console output)",
+    )
 
     args = parser.parse_args()
 
+    logger_context = configure_logging(args.log_level, args.log_file, use_queue=True)
+    logger = logging.getLogger(__name__)
     try:
+        logger.info("Starting static traffic analysis")
         db_selected = any((args.db_user, args.db_password, args.db_host, args.db_name))
         _select_rule_source(args.config, args.excel, db_selected)
 
@@ -247,6 +275,12 @@ def main() -> None:
         src_records = _load_csv_networks(Path(args.src_csv), "Network Segment")
         dst_records = _load_csv_networks(Path(args.dst_csv), "Network Segment")
         ports = list(_iter_ports(Path(args.ports)))
+        logger.info(
+            "Loaded %s source records, %s destination records, %s ports",
+            len(src_records),
+            len(dst_records),
+            len(ports),
+        )
 
         if args.max_hosts < 1:
             raise ParseError("--max-hosts must be a positive integer")
@@ -255,6 +289,7 @@ def main() -> None:
         # Eagerly resolve all group memberships to optimize the simulation hot path.
         data.address_book.flatten_all_groups()
         data.service_book.flatten_all_groups()
+        logger.debug("Flattened address and service groups")
 
         # Build a shared context to avoid re-serializing large datasets for every task.
         context = SimulationContext(
@@ -263,9 +298,12 @@ def main() -> None:
             service_book=data.service_book,
             match_mode=match_mode,
             ignore_schedule=args.ignore_schedule,
+            log_queue=logger_context.queue,
+            log_level=args.log_level,
         )
         # Choose a worker count that respects both the CLI input and dataset size.
         worker_count = _resolve_worker_count(args.workers, len(src_records))
+        logger.info("Using %s worker processes", worker_count)
 
         dst_networks = tuple(_iter_dst_networks(dst_records, match_mode))
         ports_tuple = tuple(ports)
@@ -294,8 +332,15 @@ def main() -> None:
                     output_rows.append(row)
 
         _write_output(Path(args.out), output_rows)
+        logger.info("Wrote %s rows to %s", len(output_rows), args.out)
     except ParseError as exc:
+        logger.warning("Parsing failed: %s", exc)
         raise SystemExit(str(exc)) from exc
+    except Exception:
+        logger.fatal("Fatal error during processing", exc_info=True)
+        raise
+    finally:
+        stop_listener(logger_context)
 
 
 if __name__ == "__main__":
