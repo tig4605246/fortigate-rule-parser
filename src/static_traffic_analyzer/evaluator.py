@@ -44,6 +44,12 @@ def _evaluate_address_objects(
         if mode.mode == "sample-ip":
             if obj.contains_ip(network.network_address):
                 return MatchOutcome.MATCH
+        elif mode.mode == "fuzzy":
+            # Treat any overlap between the requested CIDR and the address object as a match.
+            # This covers partial containment where only a subset of the CIDR is inside the object.
+            if obj.overlaps_network(network):
+                logger.debug("Address %s overlaps network %s (fuzzy match)", obj.name, network)
+                return MatchOutcome.MATCH
         elif mode.mode == "expand":
             if network.num_addresses <= mode.max_hosts:
                 all_match = True

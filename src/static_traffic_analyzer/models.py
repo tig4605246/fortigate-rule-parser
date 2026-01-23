@@ -41,6 +41,14 @@ class AddressObject:
             return self.start_ip <= network.network_address and self.end_ip >= network.broadcast_address
         return False
 
+    def overlaps_network(self, network: IPv4Network) -> bool:
+        """Return True if any portion of the network overlaps this object."""
+        if self.address_type == AddressType.IPMASK and self.subnet is not None:
+            return self.subnet.overlaps(network)
+        if self.address_type == AddressType.IPRANGE and self.start_ip and self.end_ip:
+            return not (self.end_ip < network.network_address or self.start_ip > network.broadcast_address)
+        return False
+
 
 @dataclass(frozen=True)
 class AddressGroup:

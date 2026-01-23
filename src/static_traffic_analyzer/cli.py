@@ -214,7 +214,7 @@ def main() -> None:
     parser.add_argument("--ignore-schedule", action="store_true", help="Ignore policy schedules")
     parser.add_argument(
         "--match-mode",
-        choices=["segment", "sample-ip", "expand"],
+        choices=["segment", "sample-ip", "expand", "fuzzy"],
         default="segment",
         help="Address match mode",
     )
