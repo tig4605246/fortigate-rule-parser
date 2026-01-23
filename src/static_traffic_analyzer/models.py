@@ -140,6 +140,7 @@ class MatchDetail:
     matched_policy_id: Optional[str]
     matched_policy_name: Optional[str]
     matched_policy_action: Optional[str]
+    matched_policy_destination: Optional[tuple[str, ...]]
     reason: str
 
 

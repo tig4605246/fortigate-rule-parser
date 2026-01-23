@@ -192,6 +192,7 @@ def evaluate_policy(
                 matched_policy_id=policy.policy_id,
                 matched_policy_name=policy.name,
                 matched_policy_action=policy.action,
+                matched_policy_destination=policy.destination,
                 reason="UNKNOWN_MATCH_CONDITION",
             )
 
@@ -203,6 +204,7 @@ def evaluate_policy(
                 matched_policy_id=policy.policy_id,
                 matched_policy_name=policy.name,
                 matched_policy_action=policy.action,
+                matched_policy_destination=policy.destination,
                 reason="MATCH_POLICY_ACCEPT",
             )
         elif decision == Decision.DENY:
@@ -212,6 +214,7 @@ def evaluate_policy(
                 matched_policy_id=policy.policy_id,
                 matched_policy_name=policy.name,
                 matched_policy_action=policy.action,
+                matched_policy_destination=policy.destination,
                 reason="MATCH_POLICY_DENY",
             )
 
@@ -221,6 +224,7 @@ def evaluate_policy(
         matched_policy_id=None,
         matched_policy_name=None,
         matched_policy_action=None,
+        matched_policy_destination=None,
         reason="IMPLICIT_DENY",
     )
 
