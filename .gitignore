@@ -37,6 +37,6 @@ __pycache__/
 
 .DS_Store
 
-results.csv
-routable.csv
+*results.csv
+*routable.csv
 *-go
