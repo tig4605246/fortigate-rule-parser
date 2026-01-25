@@ -14,7 +14,12 @@ The implementation of the tool can be divided into 3 parts
 
 ## Overview
 
-A FrotiGate configuration written in Golang
+A FrotiGate configuration written in Golang.
+
+## Reference
+
+- [Well Known Ports](https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml)
+- On Linux system, we use /etc/services to resolve well known ports.
 
 ## CLI usage
 
