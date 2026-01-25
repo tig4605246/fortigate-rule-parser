@@ -30,7 +30,7 @@ Python Result: For traffic from 192.168.1.10 to any destination on port 443, the
 
 Go Result: The same traffic would result in a DENY (specifically, IMPLICIT_DENY), because the ExternalService FQDN object is skipped during evaluation, causing Policy 1 to not match.
 
-2. Parsing Inputs
+2. Parsing Inputs (implemented)
 Difference: CIDR Block Expansion
 Python: The Python implementation is capable of fully expanding CIDR blocks from the input files (src.csv, dst.csv). In its expand mode, if src.csv contains 10.0.0.0/30, it will generate and test four distinct source IPs (10.0.0.0, 10.0.0.1, 10.0.0.2, 10.0.0.3).
 Go: To achieve maximum performance and avoid iterating over potentially millions of IPs, the Go implementation's producer goroutine simplifies this. For any given CIDR in the input files, it generates only one task using the network address (the first IP) of the block as a representative sample.
