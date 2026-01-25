@@ -201,25 +201,3 @@ func parsePortsFile(r io.Reader) ([]PortInfo, error) {
 
 	return ports, scanner.Err()
 }
-
-// Helper to iterate through all IPs in a CIDR.
-// Use with caution on large networks.
-func expandCIDR(cidr *net.IPNet) []net.IP {
-	var ips []net.IP
-	for ip := cidr.IP.Mask(cidr.Mask); cidr.Contains(ip); inc(ip) {
-		// Create a copy of the IP to avoid modification issues
-		ipCopy := make(net.IP, len(ip))
-		copy(ipCopy, ip)
-		ips = append(ips, ipCopy)
-	}
-	return ips
-}
-
-func inc(ip net.IP) {
-	for j := len(ip) - 1; j >= 0; j-- {
-		ip[j]++
-		if ip[j] > 0 {
-			break
-		}
-	}
-}

@@ -11,6 +11,7 @@ import (
 	"static-traffic-analyzer/internal/engine"
 	"static-traffic-analyzer/internal/model"
 	"static-traffic-analyzer/internal/parser"
+	"static-traffic-analyzer/internal/utils"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +31,8 @@ var (
 	logLevel     string
 	logFile      string
 	ruleProvider string
+	matchMode    string
+	maxHosts     uint64
 )
 
 func newRootCmd() *cobra.Command {
@@ -53,6 +56,10 @@ func newRootCmd() *cobra.Command {
 	rootCmd.Flags().IntVarP(&workers, "workers", "w", runtime.NumCPU(), "Number of concurrent workers")
 	rootCmd.Flags().StringVar(&logLevel, "log-level", "INFO", "Log level (DEBUG, INFO, WARN, ERROR)")
 	rootCmd.Flags().StringVar(&logFile, "log-file", "", "Log file path (default: stderr)")
+
+	// Matching mode flags
+	rootCmd.Flags().StringVar(&matchMode, "mode", "sample", "Matching mode: 'sample' (test first IP) or 'expand' (test all IPs in small CIDRs)")
+	rootCmd.Flags().Uint64Var(&maxHosts, "max-hosts", 65536, "Maximum number of hosts in a CIDR to expand in 'expand' mode")
 
 	// Mark required flags
 	rootCmd.MarkFlagRequired("src")
@@ -138,32 +145,50 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	// --- 9. Start Producer Goroutine ---
-	slog.Info("Starting task producer")
-	taskCount := 0
-	for _, srcNet := range traffic.SrcIPs {
-		for _, dst := range traffic.DstIPs {
-			for _, portInfo := range traffic.Ports {
-				// This is a simplification. For large CIDRs, iterating is not feasible.
-				// A more advanced version would handle CIDRs directly in the evaluation.
-				// For this implementation, we simulate one IP from each CIDR block.
-				srcIP := srcNet.IP
-				dstIP := dst.IPNet.IP
-				tasks <- model.Task{
-					SrcIP:        srcIP,
-					SrcCIDR:      srcNet.String(),
-					DstIP:        dstIP,
-					DstCIDR:      dst.IPNet.String(),
-					DstMeta:      dst.Metadata,
-					Port:         portInfo.Port,
-					Proto:        portInfo.Protocol,
-					ServiceLabel: portInfo.Label,
+	go func() {
+		slog.Info("Starting task producer", "mode", matchMode)
+		taskCount := 0
+		for _, srcNet := range traffic.SrcIPs {
+			for _, dst := range traffic.DstIPs {
+				for _, portInfo := range traffic.Ports {
+
+					srcHosts := []net.IP{srcNet.IP}
+					dstHosts := []net.IP{dst.IPNet.IP}
+
+					if matchMode == "expand" {
+						srcSize := utils.CIDRSize(srcNet)
+						if srcSize > 1 && srcSize <= maxHosts {
+							slog.Debug("Expanding source CIDR", "cidr", srcNet.String(), "size", srcSize)
+							srcHosts = expandCIDR(srcNet)
+						}
+						dstSize := utils.CIDRSize(dst.IPNet)
+						if dstSize > 1 && dstSize <= maxHosts {
+							slog.Debug("Expanding destination CIDR", "cidr", dst.IPNet.String(), "size", dstSize)
+							dstHosts = expandCIDR(dst.IPNet)
+						}
+					}
+
+					for _, srcIP := range srcHosts {
+						for _, dstIP := range dstHosts {
+							tasks <- model.Task{
+								SrcIP:        srcIP,
+								SrcCIDR:      srcNet.String(),
+								DstIP:        dstIP,
+								DstCIDR:      dst.IPNet.String(),
+								DstMeta:      dst.Metadata,
+								Port:         portInfo.Port,
+								Proto:        portInfo.Protocol,
+								ServiceLabel: portInfo.Label,
+							}
+							taskCount++
+						}
+					}
 				}
-				taskCount++
 			}
 		}
-	}
-	close(tasks) // Close tasks channel when producer is done
-	slog.Info("Task producer finished", "total_tasks", taskCount)
+		close(tasks) // Close tasks channel when producer is done
+		slog.Info("Task producer finished", "total_tasks", taskCount)
+	}()
 
 	// --- 10. Wait for Workers and Writer ---
 	wg.Wait()      // Wait for all workers to finish
@@ -173,6 +198,22 @@ func run(cmd *cobra.Command, args []string) error {
 	slog.Info("Analysis complete", "duration", time.Since(startTime))
 	return nil
 }
+
+// ...
+
+// expandCIDR iterates through all IPs in a CIDR.
+func expandCIDR(cidr *net.IPNet) []net.IP {
+	var ips []net.IP
+	// Get the first IP of the CIDR
+	ip := cidr.IP.Mask(cidr.Mask)
+	for ; cidr.Contains(ip); utils.Inc(ip) {
+		ipCopy := make(net.IP, len(ip))
+		copy(ipCopy, ip)
+		ips = append(ips, ipCopy)
+	}
+	return ips
+}
+
 
 func setupLogger(level, logFilePath string) *slog.Logger {
 	var logWriter io.Writer = os.Stderr
@@ -312,12 +353,3 @@ func resultWriter(wg *sync.WaitGroup, results <-chan model.SimulationResult, out
 	slog.Info("Result writer finished")
 }
 
-// inc increments an IP address, used for iterating a CIDR.
-func inc(ip net.IP) {
-	for j := len(ip) - 1; j >= 0; j-- {
-		ip[j]++
-		if ip[j] > 0 {
-			break
-		}
-	}
-}

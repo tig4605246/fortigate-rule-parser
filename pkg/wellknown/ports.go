@@ -16,6 +16,9 @@ import (
 //go:embed well_known_ports.csv
 var wellKnownPortsData string
 
+// Ignore all icmp related firewall whitelist
+const ICMP = "ALL_ICMP"
+
 type ServiceEntry struct {
 	Protocol model.Protocol
 	Port     int
@@ -77,6 +80,12 @@ func init() {
 			}
 		}
 	}
+
+	ignore_icmp_accept := ServiceEntry{
+		Protocol: model.TCP,
+		Port:     65535,
+	}
+	serviceRegistry[strings.ToUpper(ICMP)] = append(serviceRegistry[strings.ToUpper(ICMP)], ignore_icmp_accept)
 }
 
 // GetService returns the port and protocol for a well-known service name.

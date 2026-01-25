@@ -190,6 +190,8 @@ def run_case(case_path: Path, db_is_running: bool) -> bool:
         str(inputs_dir / "ports.txt"),
         "--out",
         str(OUT_FILE),
+        "--mode",
+        "expand",
     ]
 
     # Test with fortigate.conf.
