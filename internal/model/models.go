@@ -64,4 +64,5 @@ type SimulationResult struct {
 	MatchedPolicyID     string
 	MatchedPolicyAction string
 	Reason              string
+	FlowCount           uint64
 }

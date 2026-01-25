@@ -216,3 +216,66 @@ func mustParseCIDR(t *testing.T, cidr string) *net.IPNet {
 	}
 	return ipNet
 }
+
+func TestEvaluatorPrecheck(t *testing.T) {
+	policies := []model.Policy{
+		{
+			ID:       "1",
+			Priority: 1,
+			Action:   "accept",
+			Enabled:  true,
+			SrcAddrs: []*model.AddressObject{{Name: "src", Type: "ipmask", IPNet: mustParseCIDR(t, "10.0.0.0/24")}},
+			DstAddrs: []*model.AddressObject{{Name: "dst", Type: "ipmask", IPNet: mustParseCIDR(t, "192.168.1.0/24")}},
+			Services: []*model.ServiceObject{{Name: "web", Protocol: model.TCP, StartPort: 80, EndPort: 80}},
+		},
+		{
+			ID:       "2",
+			Priority: 2,
+			Action:   "deny",
+			Enabled:  true,
+			SrcAddrs: []*model.AddressObject{{Name: "all"}},
+			DstAddrs: []*model.AddressObject{{Name: "all"}},
+			Services: []*model.ServiceObject{{Name: "all"}},
+		},
+	}
+	evaluator := NewEvaluator(policies)
+
+	// Full match ALLOW
+	status, policy, _ := evaluator.Precheck(mustParseCIDR(t, "10.0.0.0/25"), mustParseCIDR(t, "192.168.1.10/32"), 80, model.TCP)
+	if status != StatusAllowAll || policy.ID != "1" {
+		t.Errorf("expected StatusAllowAll from policy 1, got %s (ID %s)", status, policy.ID)
+	}
+
+	// Partial match (input is /16, policy is /24) -> EXPAND
+	status, policy, _ = evaluator.Precheck(mustParseCIDR(t, "10.0.0.0/16"), mustParseCIDR(t, "192.168.1.0/24"), 80, model.TCP)
+	if status != StatusExpand || policy.ID != "1" {
+		t.Errorf("expected StatusExpand from policy 1, got %s (ID %s)", status, policy.ID)
+	}
+
+	// No match policy 1, matches policy 2 (broad) -> SKIP (DENY)
+	status, policy, _ = evaluator.Precheck(mustParseCIDR(t, "172.16.0.0/24"), mustParseCIDR(t, "192.168.1.0/24"), 443, model.TCP)
+	if status != StatusSkip || policy.ID != "2" {
+		t.Errorf("expected StatusSkip from policy 2, got %s (ID %s)", status, policy.ID)
+	}
+}
+
+func TestCidrRange(t *testing.T) {
+	_, cidr, _ := net.ParseCIDR("192.168.1.0/24")
+	start, end := cidrRange(cidr)
+	if start.String() != "192.168.1.0" {
+		t.Errorf("expected 192.168.1.0, got %s", start.String())
+	}
+	if end.String() != "192.168.1.255" {
+		t.Errorf("expected 192.168.1.255, got %s", end.String())
+	}
+	
+	// IPv6
+	_, cidr6, _ := net.ParseCIDR("2001:db8::/120")
+	start6, end6 := cidrRange(cidr6)
+	if start6.String() != "2001:db8::" {
+		t.Errorf("expected 2001:db8::, got %s", start6.String())
+	}
+	if end6.String() != "2001:db8::ff" {
+		t.Errorf("expected 2001:db8::ff, got %s", end6.String())
+	}
+}

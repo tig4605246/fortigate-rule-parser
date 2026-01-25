@@ -134,7 +134,7 @@ func run(cmd *cobra.Command, args []string) error {
 	totalTasks := estimateTotalTasks(traffic, matchMode, maxHosts)
 	slog.Info("Task count estimated", "total_tasks", totalTasks)
 	if maxTasks > 0 && totalTasks > maxTasks {
-		slog.Warn("Estimated task count exceeds limit", "total_tasks", totalTasks, "max_tasks", maxTasks)
+		return fmt.Errorf("estimated task count %d exceeds limit %d", totalTasks, maxTasks)
 	}
 
 	var completedTasks uint64
@@ -217,16 +217,64 @@ func run(cmd *cobra.Command, args []string) error {
 		}
 
 		for _, si := range srcInfos {
-			// Start from the exact IP provided in the input, unless expanding.
-			sip := si.net.IP
-			if si.expand {
-				sip = si.net.IP.Mask(si.net.Mask)
-			}
-			for {
-				srcIP := make(net.IP, len(sip))
-				copy(srcIP, sip)
+			for _, di := range dstInfos {
+				expandPorts := make([]parser.PortInfo, 0, len(traffic.Ports))
+				for _, portInfo := range traffic.Ports {
+					status, matchedPolicy, reason := evaluator.Precheck(si.net, di.IPNet, portInfo.Port, portInfo.Protocol)
+					if status == engine.StatusSkip || status == engine.StatusAllowAll {
+						decision := "DENY"
+						if status == engine.StatusAllowAll {
+							decision = "ALLOW"
+						}
 
-				for _, di := range dstInfos {
+						numFlows := utils.CIDRSize(si.net) * utils.CIDRSize(di.IPNet)
+						result := model.SimulationResult{
+							SrcNetworkSegment:   si.orig,
+							DstNetworkSegment:   di.orig,
+							ServiceLabel:        portInfo.Label,
+							Protocol:            string(portInfo.Protocol),
+							Port:                portInfo.Port,
+							Decision:            decision,
+							MatchedPolicyAction: "",
+							MatchedPolicyID:     "",
+							Reason:              reason,
+							FlowCount:           numFlows,
+						}
+						if matchedPolicy != nil {
+							result.MatchedPolicyAction = matchedPolicy.Action
+							result.MatchedPolicyID = matchedPolicy.ID
+						}
+						if val, ok := di.Metadata["dst_gn"]; ok {
+							result.DstGn = val
+						}
+						if val, ok := di.Metadata["dst_site"]; ok {
+							result.DstSite = val
+						}
+						if val, ok := di.Metadata["dst_location"]; ok {
+							result.DstLocation = val
+						}
+
+						results <- result
+						taskCount++
+						continue
+					}
+
+					expandPorts = append(expandPorts, portInfo)
+				}
+
+				if len(expandPorts) == 0 {
+					continue
+				}
+
+				// Start from the exact IP provided in the input, unless expanding.
+				sip := si.net.IP
+				if si.expand {
+					sip = si.net.IP.Mask(si.net.Mask)
+				}
+				for {
+					srcIP := make(net.IP, len(sip))
+					copy(srcIP, sip)
+
 					dip := di.IPNet.IP
 					if di.expand {
 						dip = di.IPNet.IP.Mask(di.IPNet.Mask)
@@ -235,7 +283,7 @@ func run(cmd *cobra.Command, args []string) error {
 						dstIP := make(net.IP, len(dip))
 						copy(dstIP, dip)
 
-						for _, portInfo := range traffic.Ports {
+						for _, portInfo := range expandPorts {
 							tasks <- model.Task{
 								SrcIP:        srcIP,
 								SrcCIDR:      si.orig,
@@ -257,14 +305,14 @@ func run(cmd *cobra.Command, args []string) error {
 							break
 						}
 					}
-				}
 
-				if !si.expand {
-					break
-				}
-				utils.Inc(sip)
-				if !si.net.Contains(sip) {
-					break
+					if !si.expand {
+						break
+					}
+					utils.Inc(sip)
+					if !si.net.Contains(sip) {
+						break
+					}
 				}
 			}
 		}
@@ -469,7 +517,7 @@ func resultWriter(wg *sync.WaitGroup, results <-chan model.SimulationResult, out
 		if result.Decision == "ALLOW" {
 			routableWriter.Write(record)
 		}
-		written++
+		written += result.FlowCount
 		if written%1024 == 0 {
 			atomic.StoreUint64(completedTasks, written)
 		}
