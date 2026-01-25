@@ -74,27 +74,44 @@ func (p *MariaDBParser) loadAddresses() error {
 	defer rows.Close()
 
 	for rows.Next() {
-		var name, addrType string
-		var subnet, startIP, endIP sql.NullString
+		var name string
+		var addrType, subnet, startIP, endIP sql.NullString
 		if err := rows.Scan(&name, &addrType, &subnet, &startIP, &endIP); err != nil {
 			return err
 		}
 
-		addr := &model.AddressObject{Name: name, Type: addrType}
-		switch addrType {
-		case "ipmask":
-			if subnet.Valid {
-				_, ipnet, err := net.ParseCIDR(subnet.String)
-				if err == nil {
-					addr.IPNet = ipnet
+		addr := &model.AddressObject{Name: name}
+		if !addrType.Valid {
+			// If address_type is NULL, start_ip is IP and end_ip is the mask.
+			if startIP.Valid && endIP.Valid {
+				ip := net.ParseIP(startIP.String)
+				maskIP := net.ParseIP(endIP.String)
+				if ip != nil && maskIP != nil {
+					addr.Type = "ipmask"
+					mask := net.IPMask(maskIP.To4())
+					if mask == nil {
+						mask = net.IPMask(maskIP)
+					}
+					addr.IPNet = &net.IPNet{IP: ip.Mask(mask), Mask: mask}
 				}
 			}
-		case "iprange":
-			if startIP.Valid {
-				addr.StartIP = net.ParseIP(startIP.String)
-			}
-			if endIP.Valid {
-				addr.EndIP = net.ParseIP(endIP.String)
+		} else {
+			addr.Type = addrType.String
+			switch addr.Type {
+			case "ipmask":
+				if subnet.Valid {
+					_, ipnet, err := net.ParseCIDR(subnet.String)
+					if err == nil {
+						addr.IPNet = ipnet
+					}
+				}
+			case "iprange":
+				if startIP.Valid {
+					addr.StartIP = net.ParseIP(startIP.String)
+				}
+				if endIP.Valid {
+					addr.EndIP = net.ParseIP(endIP.String)
+				}
 			}
 		}
 		p.AddressObjects[name] = addr

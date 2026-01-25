@@ -41,7 +41,7 @@ func setupSchema() {
 	testDB.Exec(`CREATE TABLE cfg_address (
 		id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
 		object_name VARCHAR(64) NOT NULL,
-		address_type VARCHAR(16) NOT NULL,
+		address_type VARCHAR(16) NULL,
 		subnet VARCHAR(64) NULL,
 		start_ip VARCHAR(64) NULL,
 		end_ip VARCHAR(64) NULL
@@ -183,4 +183,49 @@ func TestNewMariaDBParserErrors(t *testing.T) {
     if err == nil {
         t.Errorf("expected error for invalid DSN")
     }
+}
+
+func TestMariaDBParserNullType(t *testing.T) {
+	// Clean tables
+	if _, err := testDB.Exec("DELETE FROM cfg_address"); err != nil {
+		t.Fatalf("failed to delete: %v", err)
+	}
+
+	// Insert data with NULL address_type
+	if _, err := testDB.Exec("INSERT INTO cfg_address (object_name, address_type, start_ip, end_ip) VALUES (?, NULL, ?, ?)", 
+		"addr_null", "10.0.0.5", "255.255.255.0"); err != nil {
+		t.Fatalf("failed to insert: %v", err)
+	}
+
+	p, err := NewMariaDBParser(dsn)
+	if err != nil {
+		t.Fatalf("failed to create parser: %v", err)
+	}
+	defer p.Close()
+
+	if err := p.loadAddresses(); err != nil {
+		t.Fatalf("failed to load addresses: %v", err)
+	}
+
+	addr, ok := p.AddressObjects["addr_null"]
+	if !ok {
+		// Debug: check what we actually have
+		for name := range p.AddressObjects {
+			t.Logf("Found address object: %s", name)
+		}
+		t.Fatal("addr_null not found")
+	}
+
+	if addr.Type != "ipmask" {
+		t.Errorf("expected type ipmask, got %s", addr.Type)
+	}
+
+	if addr.IPNet == nil {
+		t.Fatal("IPNet is nil")
+	}
+
+	expected := "10.0.0.0/24"
+	if addr.IPNet.String() != expected {
+		t.Errorf("expected %s, got %s", expected, addr.IPNet.String())
+	}
 }
