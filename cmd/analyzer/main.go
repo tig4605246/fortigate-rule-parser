@@ -179,45 +179,70 @@ func run(cmd *cobra.Command, args []string) error {
 	go func() {
 		slog.Info("Starting task producer", "mode", matchMode)
 		taskCount := 0
-		for _, srcNet := range traffic.SrcIPs {
-			for _, dst := range traffic.DstIPs {
-				for _, portInfo := range traffic.Ports {
 
-					srcHosts := []net.IP{srcNet.IP}
-					dstHosts := []net.IP{dst.IPNet.IP}
+		// Pre-calculate expansion flags to avoid repeated CIDRSize calls
+		type netInfo struct {
+			net    *net.IPNet
+			expand bool
+		}
+		srcInfos := make([]netInfo, len(traffic.SrcIPs))
+		for i, n := range traffic.SrcIPs {
+			size := utils.CIDRSize(n)
+			srcInfos[i] = netInfo{net: n, expand: matchMode == "expand" && size > 1 && size <= maxHosts}
+		}
 
-					if matchMode == "expand" {
-						srcSize := utils.CIDRSize(srcNet)
-						if srcSize > 1 && srcSize <= maxHosts {
-							slog.Debug("Expanding source CIDR", "cidr", srcNet.String(), "size", srcSize)
-							srcHosts = expandCIDR(srcNet)
-						}
-						dstSize := utils.CIDRSize(dst.IPNet)
-						if dstSize > 1 && dstSize <= maxHosts {
-							slog.Debug("Expanding destination CIDR", "cidr", dst.IPNet.String(), "size", dstSize)
-							dstHosts = expandCIDR(dst.IPNet)
-						}
-					}
+		dstInfos := make([]struct {
+			parser.Destination
+			expand bool
+		}, len(traffic.DstIPs))
+		for i, d := range traffic.DstIPs {
+			size := utils.CIDRSize(d.IPNet)
+			dstInfos[i] = struct {
+				parser.Destination
+				expand bool
+			}{Destination: d, expand: matchMode == "expand" && size > 1 && size <= maxHosts}
+		}
 
-					for _, srcIP := range srcHosts {
-						for _, dstIP := range dstHosts {
+		for _, si := range srcInfos {
+			// Iterator for Source IP
+			for sip := si.net.IP.Mask(si.net.Mask); si.net.Contains(sip); {
+				srcIP := make(net.IP, len(sip))
+				copy(srcIP, sip)
+
+				for _, di := range dstInfos {
+					// Iterator for Destination IP
+					for dip := di.IPNet.IP.Mask(di.IPNet.Mask); di.IPNet.Contains(dip); {
+						dstIP := make(net.IP, len(dip))
+						copy(dstIP, dip)
+
+						for _, portInfo := range traffic.Ports {
 							tasks <- model.Task{
 								SrcIP:        srcIP,
-								SrcCIDR:      srcNet.String(),
+								SrcCIDR:      si.net.String(),
 								DstIP:        dstIP,
-								DstCIDR:      dst.IPNet.String(),
-								DstMeta:      dst.Metadata,
+								DstCIDR:      di.IPNet.String(),
+								DstMeta:      di.Metadata,
 								Port:         portInfo.Port,
 								Proto:        portInfo.Protocol,
 								ServiceLabel: portInfo.Label,
 							}
 							taskCount++
 						}
+
+						if !di.expand {
+							break
+						}
+						utils.Inc(dip)
 					}
 				}
+
+				if !si.expand {
+					break
+				}
+				utils.Inc(sip)
 			}
 		}
-		close(tasks) // Close tasks channel when producer is done
+		close(tasks)
 		slog.Info("Task producer finished", "total_tasks", taskCount)
 	}()
 
