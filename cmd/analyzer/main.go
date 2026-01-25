@@ -191,47 +191,56 @@ func run(cmd *cobra.Command, args []string) error {
 		slog.Info("Starting task producer", "mode", matchMode)
 		taskCount := 0
 
-		// Pre-calculate expansion flags to avoid repeated CIDRSize calls
 		type netInfo struct {
 			net    *net.IPNet
+			orig   string
 			expand bool
 		}
 		srcInfos := make([]netInfo, len(traffic.SrcIPs))
 		for i, n := range traffic.SrcIPs {
 			size := utils.CIDRSize(n)
-			srcInfos[i] = netInfo{net: n, expand: matchMode == "expand" && size > 1 && size <= maxHosts}
+			srcInfos[i] = netInfo{net: n, orig: n.String(), expand: matchMode == "expand" && size > 1 && size <= maxHosts}
 		}
 
 		dstInfos := make([]struct {
 			parser.Destination
+			orig   string
 			expand bool
 		}, len(traffic.DstIPs))
 		for i, d := range traffic.DstIPs {
 			size := utils.CIDRSize(d.IPNet)
 			dstInfos[i] = struct {
 				parser.Destination
+				orig   string
 				expand bool
-			}{Destination: d, expand: matchMode == "expand" && size > 1 && size <= maxHosts}
+			}{Destination: d, orig: d.IPNet.String(), expand: matchMode == "expand" && size > 1 && size <= maxHosts}
 		}
 
 		for _, si := range srcInfos {
-			// Iterator for Source IP
-			for sip := si.net.IP.Mask(si.net.Mask); si.net.Contains(sip); {
+			// Start from the exact IP provided in the input, unless expanding.
+			sip := si.net.IP
+			if si.expand {
+				sip = si.net.IP.Mask(si.net.Mask)
+			}
+			for {
 				srcIP := make(net.IP, len(sip))
 				copy(srcIP, sip)
 
 				for _, di := range dstInfos {
-					// Iterator for Destination IP
-					for dip := di.IPNet.IP.Mask(di.IPNet.Mask); di.IPNet.Contains(dip); {
+					dip := di.IPNet.IP
+					if di.expand {
+						dip = di.IPNet.IP.Mask(di.IPNet.Mask)
+					}
+					for {
 						dstIP := make(net.IP, len(dip))
 						copy(dstIP, dip)
 
 						for _, portInfo := range traffic.Ports {
 							tasks <- model.Task{
 								SrcIP:        srcIP,
-								SrcCIDR:      si.net.String(),
+								SrcCIDR:      si.orig,
 								DstIP:        dstIP,
-								DstCIDR:      di.IPNet.String(),
+								DstCIDR:      di.orig,
 								DstMeta:      di.Metadata,
 								Port:         portInfo.Port,
 								Proto:        portInfo.Protocol,
@@ -244,6 +253,9 @@ func run(cmd *cobra.Command, args []string) error {
 							break
 						}
 						utils.Inc(dip)
+						if !di.IPNet.Contains(dip) {
+							break
+						}
 					}
 				}
 
@@ -251,6 +263,9 @@ func run(cmd *cobra.Command, args []string) error {
 					break
 				}
 				utils.Inc(sip)
+				if !si.net.Contains(sip) {
+					break
+				}
 			}
 		}
 		close(tasks)
