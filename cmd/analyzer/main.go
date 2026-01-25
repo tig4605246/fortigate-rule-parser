@@ -14,6 +14,7 @@ import (
 	"static-traffic-analyzer/internal/utils"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -126,6 +127,34 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	slog.Info("Input traffic parsed", "source_cidrs", len(traffic.SrcIPs), "destination_cidrs", len(traffic.DstIPs), "ports", len(traffic.Ports))
 
+	totalTasks := estimateTotalTasks(traffic, matchMode, maxHosts)
+	slog.Info("Task count estimated", "total_tasks", totalTasks)
+
+	var completedTasks uint64
+	progressDone := make(chan struct{})
+	if totalTasks > 0 {
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					done := atomic.LoadUint64(&completedTasks)
+					remaining := uint64(0)
+					if done < totalTasks {
+						remaining = totalTasks - done
+					}
+					slog.Info("Progress", "total_tasks", totalTasks, "remaining_tasks", remaining)
+					if done >= totalTasks {
+						return
+					}
+				case <-progressDone:
+					return
+				}
+			}
+		}()
+	}
+
 	// --- 6. Setup Worker Pool and Channels ---
 	tasks := make(chan model.Task, workers*100)
 	results := make(chan model.SimulationResult, workers*100)
@@ -135,7 +164,7 @@ func run(cmd *cobra.Command, args []string) error {
 	slog.Info("Starting result writer", "output_file", outFile, "routable_file", routableFile)
 	var writerWg sync.WaitGroup
 	writerWg.Add(1)
-	go resultWriter(&writerWg, results, outFile, routableFile)
+	go resultWriter(&writerWg, results, outFile, routableFile, &completedTasks)
 
 	// --- 8. Start Worker Goroutines ---
 	slog.Info("Starting evaluator workers", "count", workers)
@@ -194,6 +223,7 @@ func run(cmd *cobra.Command, args []string) error {
 	wg.Wait()       // Wait for all workers to finish
 	close(results)  // Close results channel to signal writer
 	writerWg.Wait() // Wait for writer to finish writing all buffered results
+	close(progressDone)
 
 	slog.Info("Analysis complete", "duration", time.Since(startTime))
 	return nil
@@ -212,6 +242,39 @@ func expandCIDR(cidr *net.IPNet) []net.IP {
 		ips = append(ips, ipCopy)
 	}
 	return ips
+}
+
+func estimateTotalTasks(traffic *parser.InputTraffic, mode string, maxHosts uint64) uint64 {
+	if traffic == nil {
+		return 0
+	}
+
+	var total uint64
+	for _, srcNet := range traffic.SrcIPs {
+		srcCount := uint64(1)
+		if mode == "expand" {
+			size := utils.CIDRSize(srcNet)
+			if size > 1 && size <= maxHosts {
+				srcCount = size
+			}
+		}
+
+		for _, dst := range traffic.DstIPs {
+			dstCount := uint64(1)
+			if mode == "expand" {
+				size := utils.CIDRSize(dst.IPNet)
+				if size > 1 && size <= maxHosts {
+					dstCount = size
+				}
+			}
+
+			for range traffic.Ports {
+				total += srcCount * dstCount
+			}
+		}
+	}
+
+	return total
 }
 
 func setupLogger(level, logFilePath string) *slog.Logger {
@@ -302,7 +365,7 @@ func worker(wg *sync.WaitGroup, id int, evaluator *engine.Evaluator, tasks <-cha
 	slog.Debug("Worker finished", "id", id)
 }
 
-func resultWriter(wg *sync.WaitGroup, results <-chan model.SimulationResult, outPath, routablePath string) {
+func resultWriter(wg *sync.WaitGroup, results <-chan model.SimulationResult, outPath, routablePath string, completedTasks *uint64) {
 	defer wg.Done()
 
 	outFile, err := os.Create(outPath)
@@ -329,6 +392,7 @@ func resultWriter(wg *sync.WaitGroup, results <-chan model.SimulationResult, out
 	outWriter.Write(header)
 	routableWriter.Write(header)
 
+	var written uint64
 	for result := range results {
 		record := []string{
 			result.SrcNetworkSegment,
@@ -348,6 +412,11 @@ func resultWriter(wg *sync.WaitGroup, results <-chan model.SimulationResult, out
 		if result.Decision == "ALLOW" {
 			routableWriter.Write(record)
 		}
+		written++
+		if written%1024 == 0 {
+			atomic.StoreUint64(completedTasks, written)
+		}
 	}
+	atomic.StoreUint64(completedTasks, written)
 	slog.Info("Result writer finished")
 }
