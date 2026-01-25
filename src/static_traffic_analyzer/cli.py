@@ -5,12 +5,13 @@ import argparse
 import csv
 import logging
 import os
+from contextlib import ExitStack
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from ipaddress import IPv4Network
 from multiprocessing import Queue
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, TextIO
 
 from .evaluator import MatchMode, evaluate_policy
 from .models import AddressBook, Decision, PolicyRule, ServiceBook
@@ -205,6 +206,58 @@ def _write_output(
             writer.writerow(row)
 
 
+@dataclass
+class CsvOutput:
+    """Tracks an open CSV writer to stream output rows safely."""
+
+    handle: TextIO
+    writer: csv.DictWriter
+    rows_written: int = 0
+
+    def write(self, row: dict[str, str | int | None]) -> None:
+        """Write a single row and flush immediately for durability."""
+        self.writer.writerow(row)
+        self.rows_written += 1
+        self.handle.flush()
+
+    def close(self) -> None:
+        """Close the underlying file handle."""
+        self.handle.close()
+
+
+def _open_csv_output(path: Path, fieldnames: list[str]) -> CsvOutput:
+    """Open a CSV file for streaming output and write the header immediately."""
+    handle = path.open("w", newline="", encoding="utf-8")
+    writer = csv.DictWriter(handle, fieldnames=fieldnames)
+    writer.writeheader()
+    handle.flush()
+    return CsvOutput(handle=handle, writer=writer)
+
+
+def _shutdown_process_pool(executor: ProcessPoolExecutor, logger: logging.Logger) -> None:
+    """Attempt to stop worker processes promptly after an interrupt."""
+    logger.warning("Interrupt received; stopping worker processes and cancelling queued tasks")
+    try:
+        executor.shutdown(wait=False, cancel_futures=True)
+    finally:
+        processes = getattr(executor, "_processes", None)
+        if not processes:
+            return
+        for process in processes.values():
+            try:
+                if process.is_alive():
+                    process.terminate()
+            except Exception:  # pragma: no cover - best effort cleanup
+                logger.debug("Failed to terminate process %s", process.pid, exc_info=True)
+        for process in processes.values():
+            try:
+                process.join(timeout=1)
+                if process.is_alive():
+                    process.kill()
+            except Exception:  # pragma: no cover - best effort cleanup
+                logger.debug("Failed to join/kill process %s", process.pid, exc_info=True)
+
+
 def main() -> None:
     """CLI entrypoint."""
     parser = argparse.ArgumentParser(description="Static Traffic Analyzer")
@@ -316,40 +369,72 @@ def main() -> None:
         dst_networks = tuple(_iter_dst_networks(dst_records, match_mode))
         ports_tuple = tuple(ports)
         total_tasks = len(src_records) * len(dst_networks) * len(ports_tuple)
-        output_rows: list[dict[str, str | int | None]] = []
-        routable_rows: list[dict[str, str | int | None]] = []
-        if worker_count <= 1:
-            # Single-process execution avoids multiprocessing overhead for small inputs.
-            for task in _iter_simulation_tasks(src_records, dst_networks, ports_tuple):
-                row, routable_row = _simulate_task_with_context(context, task)
-                if args.filter_policy_id and str(row["matched_policy_id"]) != args.filter_policy_id:
-                    continue
-                output_rows.append(row)
-                if routable_row is not None:
-                    routable_rows.append(routable_row)
-        else:
-            # Multiprocessing uses chunked maps to reduce inter-process coordination overhead.
-            chunksize = max(1, total_tasks // (worker_count * 4)) if total_tasks else 1
-            with ProcessPoolExecutor(
-                max_workers=worker_count,
-                initializer=_init_worker,
-                initargs=(context,),
-            ) as executor:
-                tasks = _iter_simulation_tasks(src_records, dst_networks, ports_tuple)
-                for row, routable_row in executor.map(_simulate_task, tasks, chunksize=chunksize):
-                    # Rows are appended only in the parent process, avoiding shared-state races.
-                    if args.filter_policy_id and str(row["matched_policy_id"]) != args.filter_policy_id:
-                        continue
-                    output_rows.append(row)
-                    if routable_row is not None:
-                        routable_rows.append(routable_row)
+        fieldnames = [
+            "src_network_segment",
+            "dst_network_segment",
+            "dst_gn",
+            "dst_site",
+            "dst_location",
+            "service_label",
+            "protocol",
+            "port",
+            "decision",
+            "matched_policy_id",
+            "matched_policy_action",
+            "reason",
+        ]
+        interrupted = False
+        executor: ProcessPoolExecutor | None = None
+        with ExitStack() as stack:
+            output_csv = _open_csv_output(Path(args.out), fieldnames)
+            stack.callback(output_csv.close)
+            logger.info("Streaming results to %s", args.out)
+            routable_csv: CsvOutput | None = None
+            if match_mode.mode == "fuzzy":
+                routable_path = Path(args.out).with_name("routable.csv")
+                routable_csv = _open_csv_output(routable_path, fieldnames)
+                stack.callback(routable_csv.close)
+                logger.info("Streaming routable results to %s", routable_path)
+            try:
+                if worker_count <= 1:
+                    # Single-process execution avoids multiprocessing overhead for small inputs.
+                    for task in _iter_simulation_tasks(src_records, dst_networks, ports_tuple):
+                        row, routable_row = _simulate_task_with_context(context, task)
+                        if args.filter_policy_id and str(row["matched_policy_id"]) != args.filter_policy_id:
+                            continue
+                        output_csv.write(row)
+                        if routable_row is not None and routable_csv is not None:
+                            routable_csv.write(routable_row)
+                else:
+                    # Multiprocessing uses chunked maps to reduce inter-process coordination overhead.
+                    chunksize = max(1, total_tasks // (worker_count * 4)) if total_tasks else 1
+                    executor = ProcessPoolExecutor(
+                        max_workers=worker_count,
+                        initializer=_init_worker,
+                        initargs=(context,),
+                    )
+                    stack.callback(lambda: executor.shutdown(wait=False, cancel_futures=True))
+                    tasks = _iter_simulation_tasks(src_records, dst_networks, ports_tuple)
+                    for row, routable_row in executor.map(_simulate_task, tasks, chunksize=chunksize):
+                        # Rows are written only in the parent process, avoiding shared-state races.
+                        if args.filter_policy_id and str(row["matched_policy_id"]) != args.filter_policy_id:
+                            continue
+                        output_csv.write(row)
+                        if routable_row is not None and routable_csv is not None:
+                            routable_csv.write(routable_row)
+            except KeyboardInterrupt:
+                interrupted = True
+                if executor is not None:
+                    _shutdown_process_pool(executor, logger)
+                logger.warning(
+                    "Interrupted by user; writing completed rows and exiting after cleanup"
+                )
 
-        _write_output(Path(args.out), output_rows)
-        logger.info("Wrote %s rows to %s", len(output_rows), args.out)
-        if match_mode.mode == "fuzzy":
-            routable_path = Path(args.out).with_name("routable.csv")
-            _write_output(routable_path, routable_rows)
-            logger.info("Wrote %s rows to %s", len(routable_rows), routable_path)
+        logger.info("Wrote %s rows to %s", output_csv.rows_written, args.out)
+        if match_mode.mode == "fuzzy" and routable_csv is not None:
+            logger.info("Wrote %s rows to %s", routable_csv.rows_written, routable_path)
+        if interrupted:
+            raise SystemExit(130)
     except ParseError as exc:
         logger.warning("Parsing failed: %s", exc)
         raise SystemExit(str(exc)) from exc
