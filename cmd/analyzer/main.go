@@ -191,8 +191,8 @@ func run(cmd *cobra.Command, args []string) error {
 	}()
 
 	// --- 10. Wait for Workers and Writer ---
-	wg.Wait()      // Wait for all workers to finish
-	close(results) // Close results channel to signal writer
+	wg.Wait()       // Wait for all workers to finish
+	close(results)  // Close results channel to signal writer
 	writerWg.Wait() // Wait for writer to finish writing all buffered results
 
 	slog.Info("Analysis complete", "duration", time.Since(startTime))
@@ -213,7 +213,6 @@ func expandCIDR(cidr *net.IPNet) []net.IP {
 	}
 	return ips
 }
-
 
 func setupLogger(level, logFilePath string) *slog.Logger {
 	var logWriter io.Writer = os.Stderr
@@ -352,4 +351,3 @@ func resultWriter(wg *sync.WaitGroup, results <-chan model.SimulationResult, out
 	}
 	slog.Info("Result writer finished")
 }
-
