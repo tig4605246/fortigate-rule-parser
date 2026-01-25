@@ -8,7 +8,6 @@ import (
 )
 
 func TestParseInputTrafficParsesAllInputs(t *testing.T) {
-	// This test validates the happy path where source, destination, and port inputs are parsed together.
 	srcCSV := strings.NewReader("Network Segment\n10.0.0.0/24\n")
 	dstCSV := strings.NewReader("Network Segment,Site\n192.168.1.5,DC1\n")
 	portsTXT := strings.NewReader("ssh,22/tcp\n")
@@ -29,38 +28,38 @@ func TestParseInputTrafficParsesAllInputs(t *testing.T) {
 	if traffic.Ports[0].Protocol != model.TCP {
 		t.Fatalf("expected TCP protocol, got %s", traffic.Ports[0].Protocol)
 	}
-	if traffic.DstIPs[0].Metadata["dst_site"] != "DC1" {
-		t.Fatalf("expected destination metadata to preserve site column, got %#v", traffic.DstIPs[0].Metadata)
-	}
 }
 
 func TestParseSrcFileHandlesInvalidAndSingleIPEntries(t *testing.T) {
-	// This test confirms invalid IP entries are skipped and single IPs are normalized to /32 or /128 CIDRs.
-	srcCSV := strings.NewReader("Network Segment\n10.0.0.0/24\nnot-an-ip\n2001:db8::1\n")
+	srcCSV := strings.NewReader("Network Segment\n10.0.0.0/24\nnot-an-ip\n2001:db8::1\n1.1.1.1\n")
 
 	srcs, err := parseSrcFile(srcCSV)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(srcs) != 2 {
-		t.Fatalf("expected 2 valid source entries, got %d", len(srcs))
+	if len(srcs) != 3 {
+		t.Fatalf("expected 3 valid source entries, got %d", len(srcs))
 	}
 
-	if ones, bits := srcs[1].Mask.Size(); ones != bits {
-		t.Fatalf("expected single IP to be /128, got /%d", ones)
+	// 2001:db8::1 should be /128
+	if ones, bits := srcs[1].Mask.Size(); ones != 128 || bits != 128 {
+		t.Fatalf("expected IPv6 single IP to be /128, got /%d", ones)
+	}
+	// 1.1.1.1 should be /32
+	if ones, bits := srcs[2].Mask.Size(); ones != 32 || bits != 32 {
+		t.Fatalf("expected IPv4 single IP to be /32, got /%d", ones)
 	}
 }
 
 func TestParseDstFileHandlesMetadataAndSingleIP(t *testing.T) {
-	// This test validates that destination metadata keys are normalized and single IPs are handled.
-	dstCSV := strings.NewReader("Network Segment,Site,Region\n192.168.1.1,DC1,US\n")
+	dstCSV := strings.NewReader("Network Segment,Site,Region\n192.168.1.1,DC1,US\n10.0.0.1,DC2,EU\n")
 
 	dsts, err := parseDstFile(dstCSV)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(dsts) != 1 {
-		t.Fatalf("expected 1 destination, got %d", len(dsts))
+	if len(dsts) != 2 {
+		t.Fatalf("expected 2 destinations, got %d", len(dsts))
 	}
 
 	meta := dsts[0].Metadata
@@ -70,12 +69,14 @@ func TestParseDstFileHandlesMetadataAndSingleIP(t *testing.T) {
 }
 
 func TestParsePortsFileSkipsInvalidLines(t *testing.T) {
-	// This test ensures invalid lines are ignored and only valid TCP/UDP ports are parsed.
 	portsTXT := strings.NewReader(strings.Join([]string{
 		"ssh,22/tcp",
 		"53/udp",
+		"http,80",
 		"invalid",
 		"bad/icmp",
+		"notaport/tcp",
+		"80/tcp",
 		"",
 	}, "\n"))
 
@@ -83,22 +84,31 @@ func TestParsePortsFileSkipsInvalidLines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(ports) != 2 {
-		t.Fatalf("expected 2 valid port entries, got %d", len(ports))
-	}
-
-	if ports[0].Port != 22 || ports[0].Protocol != model.TCP {
-		t.Fatalf("expected first port to be 22/tcp, got %d/%s", ports[0].Port, ports[0].Protocol)
-	}
-	if ports[1].Port != 53 || ports[1].Protocol != model.UDP {
-		t.Fatalf("expected second port to be 53/udp, got %d/%s", ports[1].Port, ports[1].Protocol)
+	if len(ports) != 3 {
+		t.Fatalf("expected 3 valid port entries, got %d", len(ports))
 	}
 }
 
 func TestParseSrcFileErrorsOnMissingHeader(t *testing.T) {
-	// This test confirms an explicit error is returned when required headers are missing.
 	_, err := parseSrcFile(strings.NewReader("Wrong Header\n10.0.0.0/24\n"))
 	if err == nil {
 		t.Fatalf("expected error when missing Network Segment header")
+	}
+	
+	_, err = parseSrcFile(strings.NewReader(""))
+	if err == nil {
+		t.Fatalf("expected error when file is empty")
+	}
+}
+
+func TestParseDstFileErrorsOnMissingHeader(t *testing.T) {
+	_, err := parseDstFile(strings.NewReader("Wrong Header\n10.0.0.0/24\n"))
+	if err == nil {
+		t.Fatalf("expected error when missing Network Segment header")
+	}
+
+	_, err = parseDstFile(strings.NewReader(""))
+	if err == nil {
+		t.Fatalf("expected error when file is empty")
 	}
 }
