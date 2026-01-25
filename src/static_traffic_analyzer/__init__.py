@@ -1,1 +1,0 @@
-"""Static Traffic Analyzer package."""
