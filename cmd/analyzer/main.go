@@ -34,6 +34,7 @@ var (
 	ruleProvider string
 	matchMode    string
 	maxHosts     uint64
+	fabName      string
 )
 
 func newRootCmd() *cobra.Command {
@@ -61,6 +62,7 @@ func newRootCmd() *cobra.Command {
 	// Matching mode flags
 	rootCmd.Flags().StringVar(&matchMode, "mode", "sample", "Matching mode: 'sample' (test first IP) or 'expand' (test all IPs in small CIDRs)")
 	rootCmd.Flags().Uint64Var(&maxHosts, "max-hosts", 65536, "Maximum number of hosts in a CIDR to expand in 'expand' mode")
+	rootCmd.Flags().StringVar(&fabName, "fab", "", "Fab name to filter DB queries (adds WHERE fab_name = '...')")
 
 	// Mark required flags
 	rootCmd.MarkFlagRequired("src")
@@ -86,7 +88,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	// --- 2. Load Policies ---
 	slog.Info("Loading policies...", "provider", ruleProvider)
-	policies, err := loadPolicies(ruleProvider, rulesFile, rulesDB)
+	policies, err := loadPolicies(ruleProvider, rulesFile, rulesDB, fabName)
 	if err != nil {
 		slog.Error("Failed to load policies", "error", err)
 		return err
@@ -305,7 +307,7 @@ func setupLogger(level, logFilePath string) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(logWriter, &slog.HandlerOptions{Level: lvl}))
 }
 
-func loadPolicies(provider, rulesPath, dbConnStr string) ([]model.Policy, error) {
+func loadPolicies(provider, rulesPath, dbConnStr, fabName string) ([]model.Policy, error) {
 	switch provider {
 	case "fortigate":
 		if rulesPath == "" {
@@ -325,7 +327,7 @@ func loadPolicies(provider, rulesPath, dbConnStr string) ([]model.Policy, error)
 		if dbConnStr == "" {
 			return nil, fmt.Errorf("database connection string must be provided for mariadb provider")
 		}
-		p, err := parser.NewMariaDBParser(dbConnStr)
+		p, err := parser.NewMariaDBParser(dbConnStr, fabName)
 		if err != nil {
 			return nil, err
 		}

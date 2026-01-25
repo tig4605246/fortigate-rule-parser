@@ -22,10 +22,11 @@ type MariaDBParser struct {
 	AddressObjects map[string]*model.AddressObject
 	ServiceObjects map[string]*model.ServiceObject // Assuming services can be defined in DB as well
 	AddrGrps       map[string][]string
+	FabName        string
 	SvcGrps        map[string][]string
 }
 
-func NewMariaDBParser(dsn string) (*MariaDBParser, error) {
+func NewMariaDBParser(dsn, fabName string) (*MariaDBParser, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, err
@@ -40,6 +41,7 @@ func NewMariaDBParser(dsn string) (*MariaDBParser, error) {
 		ServiceObjects: make(map[string]*model.ServiceObject),
 		AddrGrps:       make(map[string][]string),
 		SvcGrps:        make(map[string][]string),
+		FabName:        fabName,
 	}, nil
 }
 
@@ -66,8 +68,20 @@ func (p *MariaDBParser) Parse() error {
 	return p.flattenGroups()
 }
 
+
+func (p *MariaDBParser) whereFab(query string) (string, []interface{}) {
+	if p.FabName == "" {
+		return query, nil
+	}
+	if strings.Contains(strings.ToUpper(query), "WHERE") {
+		return query + " AND fab_name = ?", []interface{}{p.FabName}
+	}
+	return query + " WHERE fab_name = ?", []interface{}{p.FabName}
+}
+
 func (p *MariaDBParser) loadAddresses() error {
-	rows, err := p.db.Query("SELECT object_name, address_type, subnet, start_ip, end_ip FROM cfg_address")
+	q, args := p.whereFab("SELECT object_name, address_type, subnet, start_ip, end_ip FROM cfg_address")
+	rows, err := p.db.Query(q, args...)
 	if err != nil {
 		return err
 	}
@@ -120,7 +134,8 @@ func (p *MariaDBParser) loadAddresses() error {
 }
 
 func (p *MariaDBParser) loadAddressGroups() error {
-	rows, err := p.db.Query("SELECT group_name, members FROM cfg_address_group")
+	q, args := p.whereFab("SELECT group_name, members FROM cfg_address_group")
+	rows, err := p.db.Query(q, args...)
 	if err != nil {
 		return err
 	}
@@ -140,7 +155,8 @@ func (p *MariaDBParser) loadAddressGroups() error {
 }
 
 func (p *MariaDBParser) loadServiceGroups() error {
-	rows, err := p.db.Query("SELECT group_name, members FROM cfg_service_group")
+	q, args := p.whereFab("SELECT group_name, members FROM cfg_service_group")
+	rows, err := p.db.Query(q, args...)
 	if err != nil {
 		// If the table doesn't exist, we can probably ignore this.
 		// For now, let's return the error.
@@ -162,7 +178,10 @@ func (p *MariaDBParser) loadServiceGroups() error {
 }
 
 func (p *MariaDBParser) loadPolicies() error {
-	rows, err := p.db.Query("SELECT priority, policy_id, src_objects, dst_objects, service_objects, action, is_enabled FROM cfg_policy ORDER BY priority ASC")
+	query := "SELECT priority, policy_id, src_objects, dst_objects, service_objects, action, is_enabled FROM cfg_policy"
+	q, args := p.whereFab(query)
+	q += " ORDER BY priority ASC"
+	rows, err := p.db.Query(q, args...)
 	if err != nil {
 		return err
 	}

@@ -80,30 +80,30 @@ func TestSetupLogger(t *testing.T) {
 
 func TestLoadPolicies(t *testing.T) {
 	// Test unknown provider
-	_, err := loadPolicies("unknown", "", "")
+	_, err := loadPolicies("unknown", "", "", "")
 	if err == nil {
 		t.Error("Expected error for unknown provider")
 	}
 
 	// Test fortigate with missing file
-	_, err = loadPolicies("fortigate", "", "")
+	_, err = loadPolicies("fortigate", "", "", "")
 	if err == nil {
 		t.Error("Expected error for missing fortigate rules path")
 	}
 	
-	_, err = loadPolicies("fortigate", "/nonexistent/rules", "")
+	_, err = loadPolicies("fortigate", "/nonexistent/rules", "", "")
 	if err == nil {
 		t.Error("Expected error for nonexistent fortigate rules file")
 	}
 
 	// Test mariadb with missing DSN
-	_, err = loadPolicies("mariadb", "", "")
+	_, err = loadPolicies("mariadb", "", "", "")
 	if err == nil {
 		t.Error("Expected error for missing mariadb DSN")
 	}
 
 	// Test mariadb with invalid DSN (should fail on connection/parsing)
-	_, err = loadPolicies("mariadb", "", "invalid-dsn")
+	_, err = loadPolicies("mariadb", "", "invalid-dsn", "")
 	if err == nil {
 		t.Error("Expected error for invalid mariadb DSN")
 	}

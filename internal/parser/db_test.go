@@ -41,6 +41,7 @@ func setupSchema() {
 	testDB.Exec(`CREATE TABLE cfg_address (
 		id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
 		object_name VARCHAR(64) NOT NULL,
+		fab_name VARCHAR(16) NULL,
 		address_type VARCHAR(16) NULL,
 		subnet VARCHAR(64) NULL,
 		start_ip VARCHAR(64) NULL,
@@ -86,7 +87,7 @@ func TestMariaDBParser(t *testing.T) {
 	testDB.Exec("INSERT INTO cfg_policy (priority, policy_id, src_objects, dst_objects, service_objects, action, is_enabled) VALUES (?, ?, ?, ?, ?, ?, ?)", 
 		10, 101, `["grp1"]`, `["all"]`, `["svcgrp1"]`, "accept", "enable")
 
-	p, err := NewMariaDBParser(dsn)
+	p, err := NewMariaDBParser(dsn, "")
 	if err != nil {
 		t.Fatalf("failed to create parser: %v", err)
 	}
@@ -179,7 +180,7 @@ func TestMariaDBParserSvcFlattening(t *testing.T) {
 }
 
 func TestNewMariaDBParserErrors(t *testing.T) {
-    _, err := NewMariaDBParser("invalid-dsn")
+    _, err := NewMariaDBParser("invalid-dsn", "")
     if err == nil {
         t.Errorf("expected error for invalid DSN")
     }
@@ -197,7 +198,7 @@ func TestMariaDBParserNullType(t *testing.T) {
 		t.Fatalf("failed to insert: %v", err)
 	}
 
-	p, err := NewMariaDBParser(dsn)
+	p, err := NewMariaDBParser(dsn, "")
 	if err != nil {
 		t.Fatalf("failed to create parser: %v", err)
 	}
