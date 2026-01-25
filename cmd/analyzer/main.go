@@ -406,14 +406,14 @@ func worker(wg *sync.WaitGroup, id int, evaluator *engine.Evaluator, tasks <-cha
 func resultWriter(wg *sync.WaitGroup, results <-chan model.SimulationResult, outPath, routablePath string, completedTasks *uint64) {
 	defer wg.Done()
 
-	outFile, err := os.Create(outPath)
+	outFile, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		slog.Error("Failed to create output file", "path", outPath, "error", err)
 		return
 	}
 	defer outFile.Close()
 
-	routableFile, err := os.Create(routablePath)
+	routableFile, err := os.OpenFile(routablePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		slog.Error("Failed to create routable file", "path", routablePath, "error", err)
 		return
@@ -425,10 +425,14 @@ func resultWriter(wg *sync.WaitGroup, results <-chan model.SimulationResult, out
 	routableWriter := csv.NewWriter(routableFile)
 	defer routableWriter.Flush()
 
-	// Write headers
+	// Write headers if files are empty.
 	header := []string{"src_network_segment", "dst_network_segment", "dst_gn", "dst_site", "dst_location", "service_label", "protocol", "port", "decision", "matched_policy_id", "matched_policy_action", "reason"}
-	outWriter.Write(header)
-	routableWriter.Write(header)
+	if info, err := outFile.Stat(); err == nil && info.Size() == 0 {
+		outWriter.Write(header)
+	}
+	if info, err := routableFile.Stat(); err == nil && info.Size() == 0 {
+		routableWriter.Write(header)
+	}
 
 	var written uint64
 	for result := range results {
