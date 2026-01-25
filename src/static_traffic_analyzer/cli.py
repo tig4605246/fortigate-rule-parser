@@ -54,7 +54,7 @@ def _init_worker(context: SimulationContext) -> None:
     _WORKER_CONTEXT = context
 
 
-def _simulate_task(task: SimulationTask) -> dict[str, str | int | None]:
+def _simulate_task(task: SimulationTask) -> tuple[dict[str, str | int | None], dict[str, str | int | None] | None]:
     """Run the policy simulation for a single task using shared worker context."""
     if _WORKER_CONTEXT is None:
         raise RuntimeError("Worker context was not initialized")
@@ -64,7 +64,7 @@ def _simulate_task(task: SimulationTask) -> dict[str, str | int | None]:
 def _simulate_task_with_context(
     context: SimulationContext,
     task: SimulationTask,
-) -> dict[str, str | int | None]:
+) -> tuple[dict[str, str | int | None], dict[str, str | int | None] | None]:
     """Run the policy simulation for a single task with explicit context."""
     logger = logging.getLogger(__name__)
     src_network = parse_ipv4_network(task.src_record["Network Segment"])
@@ -87,7 +87,7 @@ def _simulate_task_with_context(
         match_mode=context.match_mode,
         ignore_schedule=context.ignore_schedule,
     )
-    return {
+    output_row = {
         "src_network_segment": str(src_network),
         "dst_network_segment": str(task.dst_network),
         "dst_gn": task.dst_record.get("GN") or "",
@@ -101,6 +101,14 @@ def _simulate_task_with_context(
         "matched_policy_action": match.matched_policy_action or "",
         "reason": match.reason,
     }
+    routable_row: dict[str, str | int | None] | None = None
+    if context.match_mode.mode == "fuzzy" and match.reason == "MATCH_POLICY_ACCEPT":
+        destination = ", ".join(match.matched_policy_destination or ())
+        routable_row = {
+            **output_row,
+            "dst_network_segment": destination,
+        }
+    return output_row, routable_row
 
 
 def _resolve_worker_count(requested: int, record_count: int) -> int:
@@ -309,13 +317,16 @@ def main() -> None:
         ports_tuple = tuple(ports)
         total_tasks = len(src_records) * len(dst_networks) * len(ports_tuple)
         output_rows: list[dict[str, str | int | None]] = []
+        routable_rows: list[dict[str, str | int | None]] = []
         if worker_count <= 1:
             # Single-process execution avoids multiprocessing overhead for small inputs.
             for task in _iter_simulation_tasks(src_records, dst_networks, ports_tuple):
-                row = _simulate_task_with_context(context, task)
+                row, routable_row = _simulate_task_with_context(context, task)
                 if args.filter_policy_id and str(row["matched_policy_id"]) != args.filter_policy_id:
                     continue
                 output_rows.append(row)
+                if routable_row is not None:
+                    routable_rows.append(routable_row)
         else:
             # Multiprocessing uses chunked maps to reduce inter-process coordination overhead.
             chunksize = max(1, total_tasks // (worker_count * 4)) if total_tasks else 1
@@ -325,14 +336,20 @@ def main() -> None:
                 initargs=(context,),
             ) as executor:
                 tasks = _iter_simulation_tasks(src_records, dst_networks, ports_tuple)
-                for row in executor.map(_simulate_task, tasks, chunksize=chunksize):
+                for row, routable_row in executor.map(_simulate_task, tasks, chunksize=chunksize):
                     # Rows are appended only in the parent process, avoiding shared-state races.
                     if args.filter_policy_id and str(row["matched_policy_id"]) != args.filter_policy_id:
                         continue
                     output_rows.append(row)
+                    if routable_row is not None:
+                        routable_rows.append(routable_row)
 
         _write_output(Path(args.out), output_rows)
         logger.info("Wrote %s rows to %s", len(output_rows), args.out)
+        if match_mode.mode == "fuzzy":
+            routable_path = Path(args.out).with_name("routable.csv")
+            _write_output(routable_path, routable_rows)
+            logger.info("Wrote %s rows to %s", len(routable_rows), routable_path)
     except ParseError as exc:
         logger.warning("Parsing failed: %s", exc)
         raise SystemExit(str(exc)) from exc
