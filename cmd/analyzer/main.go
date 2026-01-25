@@ -34,6 +34,7 @@ var (
 	ruleProvider string
 	matchMode    string
 	maxHosts     uint64
+	maxTasks     uint64
 	fabName      string
 )
 
@@ -62,6 +63,7 @@ func newRootCmd() *cobra.Command {
 	// Matching mode flags
 	rootCmd.Flags().StringVar(&matchMode, "mode", "sample", "Matching mode: 'sample' (test first IP) or 'expand' (test all IPs in small CIDRs)")
 	rootCmd.Flags().Uint64Var(&maxHosts, "max-hosts", 65536, "Maximum number of hosts in a CIDR to expand in 'expand' mode")
+	rootCmd.Flags().Uint64Var(&maxTasks, "max-tasks", 100000000, "Maximum number of tasks allowed before aborting")
 	rootCmd.Flags().StringVar(&fabName, "fab", "", "Fab name to filter DB queries (adds WHERE fab_name = '...')")
 
 	// Mark required flags
@@ -131,6 +133,9 @@ func run(cmd *cobra.Command, args []string) error {
 
 	totalTasks := estimateTotalTasks(traffic, matchMode, maxHosts)
 	slog.Info("Task count estimated", "total_tasks", totalTasks)
+	if maxTasks > 0 && totalTasks > maxTasks {
+		slog.Warn("Estimated task count exceeds limit", "total_tasks", totalTasks, "max_tasks", maxTasks)
+	}
 
 	var completedTasks uint64
 	progressDone := make(chan struct{})
@@ -138,15 +143,21 @@ func run(cmd *cobra.Command, args []string) error {
 		go func() {
 			ticker := time.NewTicker(5 * time.Second)
 			defer ticker.Stop()
+			var lastLogged uint64
 			for {
 				select {
 				case <-ticker.C:
 					done := atomic.LoadUint64(&completedTasks)
+					if done == lastLogged {
+						continue
+					}
 					remaining := uint64(0)
 					if done < totalTasks {
 						remaining = totalTasks - done
 					}
-					slog.Info("Progress", "total_tasks", totalTasks, "remaining_tasks", remaining)
+					percent := float64(done) / float64(totalTasks) * 100
+					slog.Info("Progress", "total_tasks", totalTasks, "completed_tasks", done, "remaining_tasks", remaining, "percent", fmt.Sprintf("%.2f", percent))
+					lastLogged = done
 					if done >= totalTasks {
 						return
 					}
