@@ -36,10 +36,28 @@ func TestGetServiceReturnsFalseForUnknown(t *testing.T) {
 	}
 }
 
+
+func TestGetServiceTcpHighPorts(t *testing.T) {
+	entries, ok := GetService("tcp-high-ports")
+	if !ok {
+		t.Fatalf("expected tcp-high-ports to be present")
+	}
+	found := false
+	for _, entry := range entries {
+		if entry.Protocol == model.TCP && entry.StartPort == 1024 && entry.EndPort == 65535 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected tcp-high-ports entry 1024-65535/tcp, got %#v", entries)
+	}
+}
+
 func containsPort(entries []ServiceEntry, port int, protocol model.Protocol) bool {
 	// Helper keeps entry inspection readable for multiple service assertions.
 	for _, entry := range entries {
-		if entry.Port == port && entry.Protocol == protocol {
+		if entry.StartPort == port && entry.Protocol == protocol {
 			return true
 		}
 	}

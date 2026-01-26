@@ -1,5 +1,5 @@
-src_network_segment,dst_network_segment,dst_gn,dst_site,dst_location,service_label,protocol,port,decision,matched_policy_id,matched_policy_action,reason
-192.168.10.0/24,10.0.0.0/24,GN01,HSINCHU,WEB,http,tcp,80,ALLOW,20,accept,MATCH_POLICY_ACCEPT
-192.168.10.0/24,10.0.0.0/24,GN01,HSINCHU,WEB,ssh,tcp,22,DENY,,,IMPLICIT_DENY
-192.168.20.10/32,10.0.0.0/24,GN01,HSINCHU,WEB,http,tcp,80,ALLOW,20,accept,MATCH_POLICY_ACCEPT
-192.168.20.10/32,10.0.0.0/24,GN01,HSINCHU,WEB,ssh,tcp,22,DENY,,,IMPLICIT_DENY
+src_ip,src_network_segment,dst_ip,dst_network_segment,dst_gn,dst_site,dst_location,service_label,protocol,port,decision,matched_policy_id,matched_policy_action,reason
+192.168.10.0,192.168.10.0/24,10.0.0.0,10.0.0.0/24,GN01,HSINCHU,WEB,http,tcp,80,ALLOW,20,accept,PRECHECK_ALLOW_ALL
+192.168.10.0,192.168.10.0/24,10.0.0.0,10.0.0.0/24,GN01,HSINCHU,WEB,ssh,tcp,22,DENY,,,PRECHECK_IMPLICIT_DENY
+192.168.20.10,192.168.20.10/32,10.0.0.0,10.0.0.0/24,GN01,HSINCHU,WEB,http,tcp,80,ALLOW,20,accept,PRECHECK_ALLOW_ALL
+192.168.20.10,192.168.20.10/32,10.0.0.0,10.0.0.0/24,GN01,HSINCHU,WEB,ssh,tcp,22,DENY,,,PRECHECK_IMPLICIT_DENY

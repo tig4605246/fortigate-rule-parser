@@ -20,8 +20,9 @@ var wellKnownPortsData string
 const ICMP = "ALL_ICMP"
 
 type ServiceEntry struct {
-	Protocol model.Protocol
-	Port     int
+	Protocol  model.Protocol
+	StartPort int
+	EndPort   int
 }
 
 var serviceRegistry map[string][]ServiceEntry
@@ -56,8 +57,9 @@ func init() {
 		tcpName := strings.TrimSpace(record[1])
 		if tcpName != "" && tcpName != "N/A" {
 			entry := ServiceEntry{
-				Protocol: model.TCP,
-				Port:     port,
+				Protocol:  model.TCP,
+				StartPort: port,
+				EndPort:   port,
 			}
 			serviceRegistry[strings.ToUpper(tcpName)] = append(serviceRegistry[strings.ToUpper(tcpName)], entry)
 			// Add common alias for DNS
@@ -70,8 +72,9 @@ func init() {
 		udpName := strings.TrimSpace(record[2])
 		if udpName != "" && udpName != "N/A" {
 			entry := ServiceEntry{
-				Protocol: model.UDP,
-				Port:     port,
+				Protocol:  model.UDP,
+				StartPort: port,
+				EndPort:   port,
 			}
 			serviceRegistry[strings.ToUpper(udpName)] = append(serviceRegistry[strings.ToUpper(udpName)], entry)
 			// Add common alias for DNS
@@ -82,10 +85,20 @@ func init() {
 	}
 
 	ignore_icmp_accept := ServiceEntry{
-		Protocol: model.TCP,
-		Port:     65535,
+		Protocol:  model.TCP,
+		StartPort: 65535,
+		EndPort:   65535,
 	}
 	serviceRegistry[strings.ToUpper(ICMP)] = append(serviceRegistry[strings.ToUpper(ICMP)], ignore_icmp_accept)
+
+	// Add tcp-high-ports represents port range from 1024 to 65535
+	serviceRegistry["TCP-HIGH-PORTS"] = []ServiceEntry{
+		{
+			Protocol:  model.TCP,
+			StartPort: 1024,
+			EndPort:   65535,
+		},
+	}
 }
 
 // GetService returns the port and protocol for a well-known service name.

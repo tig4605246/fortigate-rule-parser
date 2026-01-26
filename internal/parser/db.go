@@ -341,8 +341,8 @@ func (p *MariaDBParser) flattenSvcGroup(name string, visited map[string]bool) ([
 				results = append(results, &model.ServiceObject{
 					Name:      name,
 					Protocol:  wk.Protocol,
-					StartPort: wk.Port,
-					EndPort:   wk.Port,
+					StartPort: wk.StartPort,
+					EndPort:   wk.EndPort,
 				})
 			}
 			found = true
