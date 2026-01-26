@@ -229,7 +229,9 @@ func run(cmd *cobra.Command, args []string) error {
 
 						numFlows := utils.CIDRSize(si.net) * utils.CIDRSize(di.IPNet)
 						result := model.SimulationResult{
+							SrcIP:               si.net.IP.String(),
 							SrcNetworkSegment:   si.orig,
+							DstIP:               di.IPNet.IP.String(),
 							DstNetworkSegment:   di.orig,
 							ServiceLabel:        portInfo.Label,
 							Protocol:            string(portInfo.Protocol),
@@ -489,7 +491,7 @@ func resultWriter(wg *sync.WaitGroup, results <-chan model.SimulationResult, out
 	defer routableWriter.Flush()
 
 	// Write headers if files are empty.
-	header := []string{"src_network_segment", "dst_network_segment", "dst_gn", "dst_site", "dst_location", "service_label", "protocol", "port", "decision", "matched_policy_id", "matched_policy_action", "reason"}
+	header := []string{"src_ip", "src_network_segment", "dst_ip", "dst_network_segment", "dst_gn", "dst_site", "dst_location", "service_label", "protocol", "port", "decision", "matched_policy_id", "matched_policy_action", "reason"}
 	if info, err := outFile.Stat(); err == nil && info.Size() == 0 {
 		outWriter.Write(header)
 	}
@@ -500,7 +502,9 @@ func resultWriter(wg *sync.WaitGroup, results <-chan model.SimulationResult, out
 	var written uint64
 	for result := range results {
 		record := []string{
+			result.SrcIP,
 			result.SrcNetworkSegment,
+			result.DstIP,
 			result.DstNetworkSegment,
 			result.DstGn,
 			result.DstSite,

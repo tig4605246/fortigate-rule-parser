@@ -80,6 +80,8 @@ func (e *Evaluator) Evaluate(task *model.Task) model.SimulationResult {
 				Decision:            decision,
 				MatchedPolicyID:     policy.ID,
 				MatchedPolicyAction: policy.Action,
+				SrcIP:               task.SrcIP.String(),
+				DstIP:               task.DstIP.String(),
 				Reason:              reason,
 				FlowCount:           1,
 			}
@@ -88,6 +90,8 @@ func (e *Evaluator) Evaluate(task *model.Task) model.SimulationResult {
 	return model.SimulationResult{
 		Decision:  "DENY",
 		Reason:    "IMPLICIT_DENY",
+		SrcIP:     task.SrcIP.String(),
+		DstIP:     task.DstIP.String(),
 		FlowCount: 1,
 	}
 }

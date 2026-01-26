@@ -52,7 +52,9 @@ type Task struct {
 }
 
 type SimulationResult struct {
+	SrcIP               string
 	SrcNetworkSegment   string
+	DstIP               string
 	DstNetworkSegment   string
 	DstGn               string
 	DstSite             string

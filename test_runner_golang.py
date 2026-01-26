@@ -20,7 +20,9 @@ GO_BINARY = PROJECT_ROOT / "static-traffic-analyzer-go"
 
 # The primary key for a flow in the CSV output, used for matching rows.
 CSV_KEY = (
+    "src_ip",
     "src_network_segment",
+    "dst_ip",
     "dst_network_segment",
     "protocol",
     "port",
